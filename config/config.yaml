@@ -1,0 +1,70 @@
+alerts:
+  slack:
+    send_on:
+      auto_pause_on: true
+      buy_fill: true
+      hedge_timeout: true
+      pair_done: true
+      reject_spike: true
+      sell_fill: true
+    webhook: ''
+app:
+  logging:
+    file_rotation:
+      count: 5
+      size: 10
+    level: INFO
+  mode: real
+  timezone: Asia/Seoul
+execution:
+  cancel_then_new_on_type_change: true
+  max_concurrent_symbols: 2
+  max_outstanding_pairs_per_symbol: 1
+  t_hedge_ms: 1000
+fees:
+  krx:
+    broker_bps: 1.5
+  nxt:
+    broker_bps: 1.45
+    regulatory_bps: 0.31833
+kiwoom:
+  account: ''
+  features:
+    use_al_feed: false
+    use_sor: false
+  rate_limits:
+    orders_per_sec: 5
+    queries_per_sec: 5
+    reserve_order_tokens: 2
+  screen_numbers:
+    marketdata:
+    - 101
+    - 102
+    - 103
+    - 104
+    orders: 200
+  server: 실서버
+sessions:
+  arm_only_in_overlap: true
+  nxt_main:
+    end: '15:20'
+    start: 09:00:30
+  overlap_window:
+    end: '15:19:50'
+    start: 09:00:32
+  use_fid_215_signals: true
+spread_engine:
+  batch_interval_ms: 10
+  cooldown_ms: 100
+  edge_rule:
+    also_require_min_visible_qty: 1
+    min_net_ticks_after_fees: 1
+telemetry:
+  orders_utilization_autopause:
+    enabled: true
+    sustain_seconds: 5
+    threshold: 0.8
+  slo_targets_ms:
+    send_to_ack_p95: 150
+    signal_to_send_p95: 15
+    tick_to_signal_p95: 25

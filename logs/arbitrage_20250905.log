@@ -1,0 +1,28 @@
+2025-09-05 14:47:41 | INFO     | root                 | Logging system initialized
+2025-09-05 14:47:41 | WARNING  | src.core.config_manager | Config file not found at config/config.yaml, using defaults
+2025-09-05 14:47:41 | INFO     | src.core.config_manager | Default configuration saved to config/config.yaml
+2025-09-05 14:47:41 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 14:48:27 | INFO     | root                 | Logging system initialized
+2025-09-05 14:48:27 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-05 14:48:27 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 14:53:25 | INFO     | root                 | Logging system initialized
+2025-09-05 14:53:25 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 14:53:25 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-05 14:53:25 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 14:53:25 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-05 14:53:25 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-05 14:53:25 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-05 14:55:07 | INFO     | root                 | Logging system initialized
+2025-09-05 14:55:07 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 14:55:07 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-05 14:55:07 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 14:55:07 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-05 14:55:07 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-05 14:55:07 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-05 14:56:00 | INFO     | root                 | Logging system initialized
+2025-09-05 14:56:00 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 14:56:00 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-05 14:56:00 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 14:56:00 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-05 14:56:00 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-05 14:56:00 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks

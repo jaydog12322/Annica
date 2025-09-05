@@ -241,6 +241,11 @@ class ConfigManager:
                 "max_concurrent_symbols": config.execution.max_concurrent_symbols,
                 "max_outstanding_pairs_per_symbol": config.execution.max_outstanding_pairs_per_symbol
             },
+            "throttling": {
+                "orders_bucket_per_sec": config.throttling.orders_bucket_per_sec,
+                "queries_bucket_per_sec": config.throttling.queries_bucket_per_sec,
+                "min_tokens_free_to_start_new_pair": config.throttling.min_tokens_free_to_start_new_pair
+            },
             "fees": {
                 "krx": config.fees.krx,
                 "nxt": config.fees.nxt
@@ -253,4 +258,3 @@ class ConfigManager:
                 "slack": config.alerts.slack
             }
         }
-    
