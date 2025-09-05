@@ -1,0 +1,4 @@
+pykiwoom
+PyQt5==5.15.*
+pandas==1.5.*
+python-dotenv
