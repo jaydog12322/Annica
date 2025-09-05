@@ -305,30 +305,53 @@ class SpreadEngine(QObject):
 
     def _get_tick_size(self, symbol: str) -> int:
         """
-        Get tick size for symbol.
+        Get tick size for symbol based on Korean market tick size rules.
 
-        TODO: Implement proper tick size table lookup
-        For now, simplified logic based on price ranges
+        Korean Stock Market Tick Size Table:
+        - Under 2,000 KRW: 1 KRW
+        - 2,000 ~ 4,999 KRW: 5 KRW
+        - 5,000 ~ 19,999 KRW: 10 KRW
+        - 20,000 ~ 49,999 KRW: 50 KRW
+        - 50,000 ~ 199,999 KRW: 100 KRW
+        - 200,000 ~ 499,999 KRW: 500 KRW
+        - 500,000 KRW and above: 1,000 KRW
+
+        Args:
+            symbol: Symbol code
+
+        Returns:
+            Tick size in KRW
         """
         quote = self.market_data.get_quote(symbol)
         if not quote:
-            return 1
+            return 10  # Default fallback
 
-        # Use average price for tick size determination
-        avg_price = (quote.krx_ask + quote.krx_bid) / 2 if quote.krx_ask > 0 and quote.krx_bid > 0 else 50000
+        # Use mid-price from the most recent venue data
+        krx_mid = (quote.krx_ask + quote.krx_bid) / 2 if quote.krx_ask > 0 and quote.krx_bid > 0 else 0
+        nxt_mid = (quote.nxt_ask + quote.nxt_bid) / 2 if quote.nxt_ask > 0 and quote.nxt_bid > 0 else 0
 
-        # Simplified tick size logic (Korean market)
-        if avg_price < 2000:
+        # Use the average of both venues, or fall back to whichever is available
+        if krx_mid > 0 and nxt_mid > 0:
+            reference_price = (krx_mid + nxt_mid) / 2
+        elif krx_mid > 0:
+            reference_price = krx_mid
+        elif nxt_mid > 0:
+            reference_price = nxt_mid
+        else:
+            return 10  # Default if no valid prices
+
+        # Apply Korean market tick size rules
+        if reference_price < 2000:
             return 1
-        elif avg_price < 5000:
+        elif reference_price < 5000:
             return 5
-        elif avg_price < 20000:
+        elif reference_price < 20000:
             return 10
-        elif avg_price < 50000:
+        elif reference_price < 50000:
             return 50
-        elif avg_price < 200000:
+        elif reference_price < 200000:
             return 100
-        elif avg_price < 500000:
+        elif reference_price < 500000:
             return 500
         else:
             return 1000
@@ -368,4 +391,3 @@ class SpreadEngine(QObject):
                 self.batch_timer.stop()
                 self.batch_timer.start(interval_ms)
             logger.info(f"Batch interval changed to {interval_ms}ms")
-            

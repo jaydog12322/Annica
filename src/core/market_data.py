@@ -146,7 +146,7 @@ class MarketDataManager(QObject):
 
     def subscribe_real_time_data(self) -> bool:
         """
-        Subscribe to real-time data for all symbols.
+        Subscribe to real-time data for all symbols (both KRX and NXT).
 
         Returns:
             True if all subscriptions successful
@@ -165,24 +165,29 @@ class MarketDataManager(QObject):
 
     def _subscribe_screen_shard(self, screen_no: str, symbols: List[str]) -> bool:
         """
-        Subscribe to real-time data for one screen shard.
+        Subscribe to real-time data for one screen shard (both venues).
 
         Args:
             screen_no: Screen number
-            symbols: List of symbols for this screen
+            symbols: List of base symbols for this screen
 
         Returns:
             True if subscription successful
         """
         try:
-            # Create code list string (semicolon separated)
-            code_list = ";".join(symbols)
+            # Create code lists for both venues
+            krx_codes = symbols.copy()  # Base codes for KRX
+            nxt_codes = [f"{symbol}_NX" for symbol in symbols]  # Add _NX suffix for NXT
 
-            # Subscribe to KRX quotes (assuming 주식시세 realtype)
+            # Combine all codes for this screen
+            all_codes = krx_codes + nxt_codes
+            code_list = ";".join(all_codes)
+
+            # Subscribe to both KRX and NXT quotes
             result = self.kiwoom.set_real_reg(
                 screen_no=screen_no,
                 code_list=code_list,
-                fid_list=self.KRX_QUOTE_FIDS,
+                fid_list=self.KRX_QUOTE_FIDS,  # Same FIDs work for both venues
                 real_type="0"  # Register
             )
 
@@ -191,7 +196,8 @@ class MarketDataManager(QObject):
                 self.subscription_status.emit(screen_no, False)
                 return False
 
-            logger.info(f"Subscribed screen {screen_no} with {len(symbols)} symbols")
+            logger.info(f"Subscribed screen {screen_no} with {len(symbols)} symbols "
+                        f"({len(krx_codes)} KRX + {len(nxt_codes)} NXT)")
             self.subscription_status.emit(screen_no, True)
             return True
 
