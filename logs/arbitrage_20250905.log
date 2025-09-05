@@ -30,3 +30,20 @@
 2025-09-05 14:57:59 | INFO     | __main__             | === Integration Test Starting ===
 2025-09-05 14:59:21 | INFO     | root                 | Logging system initialized
 2025-09-05 14:59:21 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 15:33:34 | INFO     | root                 | Logging system initialized
+2025-09-05 15:33:34 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 15:33:34 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-05 15:33:34 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-05 15:33:34 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-05 15:33:34 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-05 15:33:34 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-05 15:33:34 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-05 15:33:34 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-05 15:33:34 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-05 15:33:34 | INFO     | __main__             | All components initialized successfully
+2025-09-05 15:33:34 | INFO     | __main__             | Testing single arbitrage trade...
+2025-09-05 15:33:34 | INFO     | src.core.router      | Routed signal: 005930_14280_728c7895 - Take: NXT SELL, Hedge: KRX BUY
+2025-09-05 15:33:34 | INFO     | src.core.pair_manager | Started pair trade: 005930_14280_728c7895 - Signal(005930: KRX@50000 -> NXT@50100, edge=20.0bps)
+2025-09-05 15:33:34 | INFO     | __main__             | Testing multiple symbols...
+2025-09-05 15:33:34 | INFO     | src.core.router      | Routed signal: 000660_14784_dcd0a268 - Take: NXT SELL, Hedge: KRX BUY
+2025-09-05 15:33:34 | INFO     | src.core.pair_manager | Started pair trade: 000660_14784_dcd0a268 - Signal(000660: KRX@50000 -> NXT@50100, edge=20.0bps)

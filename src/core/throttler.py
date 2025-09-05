@@ -157,14 +157,14 @@ class Throttler(QObject):
         self.throttling_config = config.throttling
 
         # Token buckets
-        orders_rate = self.throttling_config["orders_bucket_per_sec"]
-        queries_rate = self.throttling_config["queries_bucket_per_sec"]
+        orders_rate = self.throttling_config.orders_bucket_per_sec
+        queries_rate = self.throttling_config.queries_bucket_per_sec
 
         self.orders_bucket = TokenBucket(orders_rate)
         self.queries_bucket = TokenBucket(queries_rate)
 
         # Reservation system
-        self.reserved_order_tokens = self.throttling_config["min_tokens_free_to_start_new_pair"]
+        self.reserved_order_tokens = self.throttling_config.min_tokens_free_to_start_new_pair
         self.currently_reserved = 0
 
         # Auto-pause system
@@ -422,7 +422,7 @@ class Throttler(QObject):
             return False
 
         # Need at least min_tokens_free_to_start_new_pair available
-        min_required = self.throttling_config["min_tokens_free_to_start_new_pair"]
+        min_required = self.throttling_config.min_tokens_free_to_start_new_pair
         available = self.orders_bucket.get_available_tokens()
 
         return available >= min_required

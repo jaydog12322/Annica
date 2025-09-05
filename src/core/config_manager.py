@@ -79,6 +79,27 @@ class ExecutionConfig:
     max_concurrent_symbols: int = 2
     max_outstanding_pairs_per_symbol: int = 1
 
+@dataclass
+class RouterConfig:
+    """Router configuration"""
+    entry_leg: Dict[str, Any] = field(default_factory=lambda: {
+        "prefer": "ioc_or_market"
+    })
+    hedge_leg: Dict[str, Any] = field(default_factory=lambda: {
+        "prefer": "limit_or_mid",
+        "allow_nxt_mid_price": True,
+        "fallback_after_ms": 1000
+    })
+
+
+@dataclass
+class ThrottlingConfig:
+    """Throttling configuration"""
+    orders_bucket_per_sec: int = 5
+    queries_bucket_per_sec: int = 5
+    min_tokens_free_to_start_new_pair: int = 4
+
+
 
 @dataclass
 class FeesConfig:
@@ -127,8 +148,10 @@ class Config:
     app: AppConfig = field(default_factory=AppConfig)
     kiwoom: KiwoomConfig = field(default_factory=KiwoomConfig)
     sessions: SessionConfig = field(default_factory=SessionConfig)
+    router: RouterConfig = field(default_factory=RouterConfig)
     spread_engine: SpreadEngineConfig = field(default_factory=SpreadEngineConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    throttling: ThrottlingConfig = field(default_factory=ThrottlingConfig)
     fees: FeesConfig = field(default_factory=FeesConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
@@ -226,6 +249,10 @@ class ConfigManager:
                 "overlap_window": config.sessions.overlap_window,
                 "nxt_main": config.sessions.nxt_main,
                 "use_fid_215_signals": config.sessions.use_fid_215_signals
+            },
+            "router": {
+                "entry_leg": config.router.entry_leg,
+                "hedge_leg": config.router.hedge_leg
             },
             "spread_engine": {
                 "batch_interval_ms": config.spread_engine.batch_interval_ms,
