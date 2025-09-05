@@ -26,3 +26,7 @@
 2025-09-05 14:56:00 | INFO     | src.core.session_state | Trading MANUALLY ARMED
 2025-09-05 14:56:00 | INFO     | src.core.market_data | MarketDataManager initialized
 2025-09-05 14:56:00 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-05 14:57:59 | INFO     | root                 | Logging system initialized
+2025-09-05 14:57:59 | INFO     | __main__             | === Integration Test Starting ===
+2025-09-05 14:59:21 | INFO     | root                 | Logging system initialized
+2025-09-05 14:59:21 | INFO     | __main__             | === Integration Test Starting ===

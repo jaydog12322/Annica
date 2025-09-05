@@ -157,9 +157,8 @@ class IntegrationTest:
         self.logger = logging.getLogger(__name__)
         self.logger.info("=== Integration Test Starting ===")
 
-        # Load configuration
-        config_manager = ConfigManager()
-        self.config = config_manager.load_config()
+        # Create a complete test configuration directly
+        self.config = self._create_test_config()
 
         # Initialize components
         self.kiwoom = MockKiwoomConnector()
@@ -180,6 +179,123 @@ class IntegrationTest:
 
         self.test_results = []
         self.logger.info("All components initialized successfully")
+
+    def _create_test_config(self):
+        """Create a complete test configuration"""
+        from src.core.config_manager import (Config, AppConfig, KiwoomConfig, SessionConfig,
+                                             RouterConfig, SpreadEngineConfig, ExecutionConfig,
+                                             ThrottlingConfig, FeesConfig, TelemetryConfig, AlertsConfig)
+
+        config = Config()
+
+        # App config
+        config.app = AppConfig(
+            mode="real",
+            timezone="Asia/Seoul"
+        )
+
+        # Kiwoom config
+        config.kiwoom = KiwoomConfig(
+            server="실서버",
+            account="",
+            screen_numbers={
+                "marketdata": [101, 102, 103, 104],
+                "orders": 200
+            },
+            rate_limits={
+                "orders_per_sec": 5,
+                "queries_per_sec": 5,
+                "reserve_order_tokens": 2
+            },
+            features={
+                "use_sor": False,
+                "use_al_feed": False
+            }
+        )
+
+        # Session config
+        config.sessions = SessionConfig(
+            arm_only_in_overlap=True,
+            overlap_window={
+                "start": "09:00:32",
+                "end": "15:19:50"
+            },
+            nxt_main={
+                "start": "09:00:30",
+                "end": "15:20"
+            },
+            use_fid_215_signals=True
+        )
+
+        # Router config
+        config.router = RouterConfig(
+            entry_leg={"prefer": "ioc_or_market"},
+            hedge_leg={
+                "prefer": "limit_or_mid",
+                "allow_nxt_mid_price": True,
+                "fallback_after_ms": 1000
+            }
+        )
+
+        # Spread engine config
+        config.spread_engine = SpreadEngineConfig(
+            batch_interval_ms=10,
+            min_net_ticks_after_fees=1,
+            also_require_min_visible_qty=1,
+            cooldown_ms=100
+        )
+
+        # Execution config
+        config.execution = ExecutionConfig(
+            t_hedge_ms=1000,
+            cancel_then_new_on_type_change=True,
+            max_concurrent_symbols=2,
+            max_outstanding_pairs_per_symbol=1
+        )
+
+        # Throttling config
+        config.throttling = ThrottlingConfig(
+            orders_bucket_per_sec=5,
+            queries_bucket_per_sec=5,
+            min_tokens_free_to_start_new_pair=4
+        )
+
+        # Fees config
+        config.fees = FeesConfig(
+            krx={"broker_bps": 1.5},
+            nxt={"broker_bps": 1.45, "regulatory_bps": 0.31833}
+        )
+
+        # Telemetry config
+        config.telemetry = TelemetryConfig(
+            slo_targets_ms={
+                "tick_to_signal_p95": 25,
+                "signal_to_send_p95": 15,
+                "send_to_ack_p95": 150
+            },
+            orders_utilization_autopause={
+                "threshold": 0.80,
+                "sustain_seconds": 5,
+                "enabled": True
+            }
+        )
+
+        # Alerts config
+        config.alerts = AlertsConfig(
+            slack={
+                "webhook": "",
+                "send_on": {
+                    "buy_fill": True,
+                    "sell_fill": True,
+                    "pair_done": True,
+                    "auto_pause_on": True,
+                    "hedge_timeout": True,
+                    "reject_spike": True
+                }
+            }
+        )
+
+        return config
 
     def _on_pair_state_changed(self, pair_id, new_state):
         """Monitor pair state changes"""
