@@ -1,0 +1,2817 @@
+1) I would like to build an arbitrage trading machine which tries to take advantage of any spread present between KRX and NXT markets in the Korean stock markets. 
+2) This will be a brainstorm session where we talk about anything related to that goes into building a good arbitrage trading machine including the overall design, technical specs, the structure of the architecture, development order, literally everything. This is not a planning per se but more of a pre-planning high level ideation session. 
+3) The session will take the form of you suggesting ideas, and I reply whether to critique or add on to your suggestion and have questions. 
+4) ultimately, every topic and material we deal with here and the tentative decisions made, will be used for the actual planning session where the actual documents for technical specifications, the project structure and the design of the overall system architecture gets documented. 
+5) In going over every topic, try to refrain from writing codes - if you feel the need for it, keep it very short, just enough to understand what the idea was. 
+6) I will provide some attachment for some domain specific knowledge base which are : "Kiwoom Open API+ guidelines.txt", "NXT 대체거래소 거래시간" and "수수료및 세금 정리" and "Readme" as these are relevant to our arbitrage trading logic. 
+7) Let's start by you asking me questions to even start from the right place. Ask me questions you need to ask. 
+ChatGPT said:
+Thought for 42s
+
+Love this—KRX↔︎NXT spread arb is a great sandbox. Before we riff, a few anchor facts from your notes so we aim at the right constraints:
+
+You’re on Windows w/ 32-bit Python and should keep Kiwoom OpenAPI calls on a single thread. 
+
+README
+
+NXT trading windows differ from KRX and include: Pre 08:00–08:50, Main 09:00:30–15:20, After 15:30–20:00, plus a close-matching window that uses KRX close. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+Kiwoom rate limits: data requests ≤5/sec and orders ≤5/sec; also real-time per screen caps. We’ll need explicit throttling/queues. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Venue specifics in API: NXT/SOR order types (21/22/23/25 and 11/12/13/15), mid-price (“거래구분=29, 가격=0”), and NXT/AL symbol variants (_NX, _AL) + 거래소구분 (1=KRX,2=NXT,3=통합). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Rough frictions (fees/taxes) so we size edge thresholds: NXT ~0.0145% (per side) vs KRX ~0.015% (+ additional venue/agency fees; total ~0.0177% one-way in your examples). 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+Kiwoom emits “장운영구분(FID 215)” signals (P…V) for NXT session changes—useful for session-aware logic. 
+
+Kiwoom_Open_API_guidelines
+
+Alright—here are the kickoff questions. Treat these as prompts to agree/disagree/extend:
+
+0) Scope & success criteria
+
+What exactly is “arb” here? Pure cross-venue same-ISIN micro-spread capture? Or also close-price matching (“종가매매시장” 15:30–16:00 vs earlier prints), pre/open/after-hours differentials, and occasional dislocations when one venue lags? 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+Edge threshold: What net edge (bps) must we see after both-sides fees, taxes (if any), and expected slippage to pull the trigger? (We can back-out from your fee baseline.) 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+Utilization vs. purity: Do you prefer fewer, higher-quality fills (tight risk) or constant pinging for tiny edges (higher turnover within 5/sec limits)? 
+
+Kiwoom_Open_API_guidelines
+
+1) Universe & instruments
+
+Coverage: KOSPI only, KOSDAQ too, ETFs? Any excludes (illiquids, 관리종목)?
+
+Symbol map: Will we normalize to KRX base code and resolve per-venue via _NX, _AL, and/or 거래소구분? (This affects market-data joins/routing.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+2) Market data strategy
+
+Consolidated vs. per-venue books: For signal gen, do we read both KRX and NXT books independently (to form synthetic spread) or rely on “통합(AL)” plus venue-specific snapshots? 
+
+Kiwoom_Open_API_guidelines
+
+Depth needed: Best bid/ask only, or top-n levels? (Queue position matters when edges are ~1 tick.)
+
+Screens & throughput: How many symbols simultaneously? (Kiwoom real-time: 100 per screen number; we’ll need screen sharding.) 
+
+Kiwoom_Open_API_guidelines
+
+Clocking: How do we time-sync (NTP discipline, monotonic clocks) to align cross-venue ticks and measure “age” of quotes?
+
+3) Execution & routing
+
+Routing policy: Direct NXT order (21/22) vs SOR (11/12) letting broker choose? For tight arb, SOR may help but can be opaque; direct allows deterministic venue choice. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Order types per venue: Leverage 중간가 (mid-price) on NXT or go pure limit/IOC? Any use of 스탑지정가 for protection? 
+
+Kiwoom_Open_API_guidelines
+
+Throttling design: Given 5 orders/sec caps, what’s our burst strategy (queueing, batching, cancel/replace policy)? 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Cancel/replace semantics: Kiwoom disallows transaction-type changes via “정정” (must cancel + new). OK to design always-cancel-then-new? 
+
+Kiwoom_Open_API_guidelines
+
+4) Sessions & timing edges
+
+Pre/After exploitation: Do we want dedicated logic for NXT Pre (08:00–08:50) and After (15:30–20:00) to arb against KRX last/indicative? 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+Open/Close behavior: Any specific play around 08:50–09:00:30 “시가 대기” and 15:20–15:30 “종가 대기”, plus the 15:30–16:00 close-matching market? 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+State machine: Should the engine subscribe to Kiwoom’s 장운영구분 (FID 215) to switch modes automatically across P…V? 
+
+Kiwoom_Open_API_guidelines
+
+5) Risk & inventory
+
+Flatness: Always end flat by session (no overnight), or allow small inventory to unwind on the alternate venue?
+
+Per-leg caps: Max notional per leg, per symbol, and per session?
+
+Adverse selection guard: What’s the max tolerated quote age / micro-price drift before we pull orders?
+
+6) Costs, taxes, and edge math
+
+Cost model source of truth: Do we parameterize fee/tax tables per venue/product and compute real-time take-home bps (pre-trade filter + post-trade PnL)? (Your baseline tables give us seed values.) 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+7) Architecture & tech choices
+
+Process model: Single-process event loop (fits Kiwoom’s single-thread constraint) plus worker processes for logging/analytics via IPC? 
+
+README
+
+Modules: (Proposed) MarketData → SpreadEngine → Router → Risk → ExecutionGateway → PnL/Telemetry. Any adds (e.g., Replay/Simulator, Throttler, SessionState)?
+
+Persistence: Tick snapshots vs “top-of-book feed only”? What retention for audits?
+
+Config: YAML/ini for symbol list, venue toggles, session calendars (NXT vs KRX), edge thresholds—hot-reload or restart?
+
+8) Backtesting & simulation
+
+Historical source: Do we have historical per-venue L1/L2? If not, we can start with recorded real-time sessions (pcap-style logs) and build a replay simulator that honours rate limits and session rules. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+Slippage model: Queue-position heuristics vs simple hit/miss by touch, with venue-specific fill probabilities.
+
+9) Ops & monitoring
+
+Health checks: What SLOs do you care about (tick-to-signal latency, signal-to-order latency, reject rate, cancel-replace latency)?
+
+Kill-switches: Per-symbol/venue freezes on rejects, repeated timeouts, or widening spreads.
+
+Observability: Slack alerts vs on-screen dashboards; what do you want in real-time (edge seen, sent, filled, PnL by bps)?
+
+10) Compliance & venue rules
+
+KRX/NXT behavior constraints: Any house rules to avoid wash perceptions (we’re crossing venues), minimum tick/lot, or broker settings (e.g., SOR default)? If SOR defaults exist, do we override? 
+
+Kiwoom_Open_API_guidelines
+
+Where do you want to start—routing policy (direct NXT vs SOR), session plays (pre/after/close), or architecture skeleton & rate-limit-aware execution flow first?
+
+Sources
+You said:
+Question round 0_and my answer.txt
+Document
+Here is my answers
+ChatGPT said:
+Thought for 2m 6s
+
+Awesome—read everything you wrote and I’m on the same page. 
+
+Question round 0_and my answer
+
+Here’s a tight pass: I’ll answer your Qs (SOR vs NXT, 중간가 mechanics, “통합(AL)”), point out a few design pitfalls, propose concrete guardrails/thresholds, and end with the next 6 questions to keep momentum.
+
+What you decided (and a few quick clarifications)
+
+Scope: Pure cross-venue KRX↔︎NXT spread capture intraday, micro-sliced fills (e.g., 20×20 shares repeatedly). Net edge must beat fees/slippage. 
+
+Question round 0_and my answer
+
+Universe: You’ll hand us ~200 KOSPI/KOSDAQ stocks; ETFs excluded (not on NXT). We’ll scale beyond 200 later. 
+
+Question round 0_and my answer
+
+Data feeds: Compare KRX and NXT quotes concurrently; focus on best bid/ask for both venues. 
+
+Question round 0_and my answer
+
+Execution bias: If a buy doesn’t fill, cancel immediately and reassess; if a sell doesn’t fill within ~1s, you’d “go market.” (We’ll fine-tune below since changing to market requires cancel+new in Kiwoom.) 
+
+Question round 0_and my answer
+
+Inventory: Always flat; positions should resolve within ~1s; pilot with 1 share per ticket, 10 shares per symbol max outstanding. 
+
+Question round 0_and my answer
+
+Costs: Use your fee/tax table as source of truth; “any profit is tradable.” We’ll parameterize and show the math. 
+
+Question round 0_and my answer
+
+Sessions: Only trade when both markets are open; skip pre/open/close games. (We’ll still wire session awareness so the engine arms/disarms safely.) 
+
+Question round 0_and my answer
+
+Quick answers to your questions
+1) “통합(AL)” and symbol mapping
+
+Kiwoom lets you reference KRX, NXT, or 통합(AL) per symbol:
+
+Codes: KRX: "039490", NXT: "039490_NX", 통합(AL): "039490_AL"; or use 거래소구분 (1=KRX, 2=NXT, 3=통합) on some TRs. This matters for clean joins and for routing. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+How we’ll use it: subscribe per-venue L1 (KRX & NXT) for signal quality, and optionally subscribe AL for convenience (sanity checks, merged last/trade prints).
+
+2) SOR vs direct NXT orders
+
+Order types added for ATS support: 11/12/13/15 = SOR and 21/22/23/25 = NXT. 
+
+Kiwoom_Open_API_guidelines
+
+What SOR does: lets broker route to the “best venue” at that instant.
+
+Why we’ll prefer direct routing for arb: you want deterministic “buy on cheap venue / sell on rich venue” pairing. SOR may cross the spread on the opposite venue and break the pair logic. So: default = direct venue orders; keep SOR only for fallback/experiments.
+
+3) “중간가(=mid-price) 주문” mechanics on NXT
+
+How to place mid orders via Kiwoom: set 거래구분(호가구분)=“29” and price=0. (Market, best, and mid also use price=0.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+When to use: mid on NXT can get passive price improvement while preserving queue standing. We’ll gate it to moments when the spread is safely > fees + a buffer and our passive fill probability is high (e.g., rich side has visible size).
+
+4) “Why measure quote age if ticks are pushed?”
+
+Two reasons:
+
+Asymmetry & latency: KRX and NXT ticks won’t hit your process at the same instant; a “spread” can be an artifact if one side is stale (network/PC load).
+
+Defense vs. adverse selection: if one side’s quote is older than, say, 100–200ms, cancel rather than chase a ghost.
+We’ll NTP-discipline the host clock and tag every inbound tick with receive-time; signals only form when both sides updated within a staleness window (e.g., ≤150ms) and are mutually consistent (no crossed books locally). (You asked for a why—that’s it.) 
+
+Question round 0_and my answer
+
+Costs → practical edge math
+
+Your note pegs NXT fees ~0.0145% plus 유관기관 ~0.00318% → ~0.0177% (=1.77 bps) one-way; KRX broker fee baseline ~0.015% (=1.5 bps) (we’ll confirm KRX’s 유관기관 if any for exactness). 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+A simple, venue-aware threshold per share:
+
+required_spread_krw >= fees_buy_krw + fees_sell_krw + slip_buffer_krw
+
+
+For a ₩50,000 stock with 1-tick=₩10, a 1-tick cross-venue spread ≈ 20 bps—comfortably above ~3–4 bps combined fees (NXT+KRX) before slippage, so 1-tick arbs are theoretically viable.
+
+We’ll start with min edge = 1 tick − (fees+1 extra tick of headroom if volatile), then tune per symbol.
+
+Execution blueprint (aligned to your micro-slicing style)
+
+Routing & types
+
+Use direct venue: 21=NXT매수/22=NXT매도 (NXT), SendOrder() regular for KRX. 
+
+Kiwoom_Open_API_guidelines
+
+Fast path order styles:
+
+Take on rich side / post on cheap side: rich side IOC (13=시장가IOC or 10=지정가IOC) to guarantee hedge; cheap side limit/mid to earn edge. 
+
+Kiwoom_Open_API_guidelines
+
+If either leg hangs > 1s, we do not “convert” the live order to market (Kiwoom can’t change order type via 정정). Instead cancel & send a new market/IOC; use …취소 + fresh order. (Kiwoom: 정정 can’t change “거래구분” from limit→market.) 
+
+Kiwoom_Open_API_guidelines
+
+Pairing & slicing
+
+Start with 1×1 share pairs; allow up to 10 outstanding pairs per symbol (your pilot limits). Track a per-symbol in-flight pair count; never exceed the Kiwoom 5 orders/sec rate cap—budget ~2–3 TPS sustained to leave headroom for cancels. 
+
+Kiwoom_Open_API_guidelines
+
+Throttling
+
+One central Throttler with 3 buckets: orders (5/sec), data requests (5/sec), real-time regs (100 symbols/screen). Round-robin symbols across 3+ screen numbers to cover 200+ L1 feeds with slack. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Session awareness
+
+Arm/disarm by FID 215 (장운영구분) signals: P…V for NXT (pre/main/after), and your static KRX clock. Only enable the arb engine during the true overlap (NXT 09:00:30–15:20, KRX 09:00–15:20). 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Market-data: the minimum we need for reliable signals
+
+Per-venue L1 (bid/ask/size) for both KRX and NXT; optionally AL for checks. Subscribe via SetRealReg with screen sharding (100 symbols per screen). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Quote-pair validator: both sides updated within ≤150ms, no crossed local book, visible size ≥ intended slice, edge ≥ threshold.
+
+Tick-size aware: compute edge in KRW using each symbol’s tick table.
+
+Health checks you asked me to “educate” you on
+
+Think of them as trip-wires and speedometers:
+
+Latency SLOs
+
+Tick→Signal p95 < 25ms; Signal→OrderSend p95 < 15ms; OrderSend→Ack p95 < 150ms. Alert on p99 overages for 60s.
+
+Reliability
+
+Reject Rate < 0.5% per 5-min rolling window; Timeouts < 0.2%.
+
+Stale Spread Ratio: % of candidate edges invalidated by quote-age test—spiking means network lag.
+
+Kill-switches (auto-pause symbol or whole engine)
+
+3 consecutive rejects or 5 within 60s → freeze symbol 60s.
+
+Unhedged exposure > N shares for > 1s → force-hedge at market then freeze symbol.
+
+Clock skew > 250ms or FID-215 state mismatch → freeze engine.
+
+Orders/sec > 80% of cap for 5s → enter “low-TPS” mode (widen thresholds).
+(You asked “when would I want kill-switches?”—these are the typical trip conditions.)
+
+Architecture sketch (no code, just structure)
+
+MarketData (per-venue subscriptions & screen sharding) → SpreadEngine (edge calc, quote-pair validator) → Router (venue-direct, order style selection) → Throttler (global) → ExecutionGateway (send/cancel/new, correlate fills) → Risk (caps, kill-switch) → PnL/Telemetry (fees model, bps, alerts).
+
+Single process for Kiwoom calls (Windows/32-bit, single-thread constraint). Workers can tail logs/metrics via IPC—never touch Kiwoom directly. 
+
+README
+
+Open items & my proposals
+
+Break-even policy. Let’s not “trade any positive edge.” Suggest min edge = fees(buy+sell) + ½ tick buffer initially. Do you want a global default (e.g., ≥1 tick net) and per-symbol overrides? (We can hot-reload thresholds.)
+
+Unfilled-leg rule. You wanted “sell→market after 1s.” That’s fine—but remember: we must cancel then new to change order type. We’ll implement a hedge escalation ladder (limit→IOC→market) with explicit cancels. 
+
+Kiwoom_Open_API_guidelines
+
+Use of 중간가. Enable on cheap/passive side only and only when depth on the far side ≥ N lots and edge ≥ 1.5× fees. Agree? 
+
+Kiwoom_Open_API_guidelines
+
+Screen plan for 200 names. We’ll allocate 3–4 screen numbers (≤100 symbols each) to leave headroom for adhoc adds/removes. 
+
+Kiwoom_Open_API_guidelines
+
+Session filter. Enforce overlap only (~09:00:30–15:20 NXT main vs 09:00–15:20 KRX). Engine hard-locks outside this window via FID-215 & wall-clock. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+Fees table. I’ll parameterize per-venue costs exactly as in your doc (NXT 0.0145% + ~0.00318%); please confirm KRX’s 유관기관 수수료 so round-trip math is precise. 
+
+수수료 및 세금 정리
+
+Next 6 questions for you
+
+Symbol list & target concurrency: Can you share the initial 200 names and any excludes (관리/저유동성), so we can pre-wire screen shards? 
+
+Question round 0_and my answer
+
+Edge threshold policy: Do you approve “≥1 tick net after fees” as the global default, with per-symbol overrides?
+
+Hedge escalation: OK to implement cancel→IOC→market escalation if one leg hangs >1s? (Type changes require cancel+new.) 
+
+Kiwoom_Open_API_guidelines
+
+중간가 usage: Limit it to the passive/cheap leg only, under liquidity & edge gates? 
+
+Kiwoom_Open_API_guidelines
+
+SOR: Shall we disable SOR for production arbitrage and keep it for a sandbox toggle? 
+
+Kiwoom_Open_API_guidelines
+
+Ops: Are you OK with the kill-switch triggers above, and Slack alerts for: new fill, frozen symbol, latency breach, or throttle saturation?
+
+If you say “yes” to most, I’ll move us into the architecture deep-dive next (modules, queues, state machines, message schemas)—that’s your #7.
+
+Sources
+You said:
+Qusetion round 1_and my comment.txt
+Document
+Here you go - my answers are written in ***<...>***
+ChatGPT said:
+Thought for 1m 22s
+
+Perfect—got your inline answers. I’ll (1) lock in your decisions, (2) clarify a few open points you asked about (SOR, 중간가, quote-age, screens, SLOs, concurrency), and then (3) lay out the architecture deep-dive you requested with module purposes, inputs/outputs, and dependencies—no code.
+
+Your decisions (locked)
+
+Drop AL feed. We’ll subscribe KRX & NXT per-venue only. 
+
+Qusetion round 1_and my comment
+
+Direct routing only (no SOR) for production; SOR kept only as an optional experiment. 
+
+Qusetion round 1_and my comment
+
+Use 중간가 if it behaves like normal bid/ask and the spread is there; otherwise prefer standard limit/IOC. 
+
+Qusetion round 1_and my comment
+
+Session window: start 09:00:32, stop 15:19:50 (overlap-only). 
+
+Qusetion round 1_and my comment
+
+Edge rule: trade only when edge ≥ (fees round-trip) + ½–1 tick. 
+
+Qusetion round 1_and my comment
+
+Slack alerts: yes. Kill-switches: park for later. 
+
+Qusetion round 1_and my comment
+
+Quick clarifications you asked for
+
+What is SOR? What’s a “sandbox toggle”?
+
+SOR (Smart Order Routing) = broker picks venue (KRX vs NXT) to seek the best execution using special order types (e.g., 11/12/13/15). That obscures which leg hits where—bad for deterministic cross-venue pairs. We’ll keep a config flag (sandbox toggle) you can flip in testing to compare, but production stays direct venue only. 
+
+Qusetion round 1_and my comment
+
+중간가: can we “buy/sell at mid” like normal?
+
+Mechanically you submit a mid-price order on NXT (it posts at the midpoint). It’s passive by design—fills when contra flow meets you; it’s not guaranteed “instantaneous” like hitting the best ask/bid. So we’ll typically take on the rich side (IOC/market) to lock the hedge and post mid/limit on the cheap side to earn the edge, falling back to IOC/market if it doesn’t fill fast. Your stance—“use mid if it works like bid/ask”—is fine, with the caveat above. 
+
+Qusetion round 1_and my comment
+
+Do more screen numbers make it faster?
+
+Screen numbers are keys for subscriptions/routing and have usage limits (manage ≤200 total; avoid reusing the same one repeatedly). They don’t increase server bandwidth; they help organize/partition streams so unsubs/resubs don’t clobber each other. We’ll shard symbols across a few screens for stability and manageability, not speed. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Throughput: “realistically 2 stocks at once?”
+
+Kiwoom caps orders at 5/sec (data requests are a separate 5/sec bucket). A single pair trade can consume 2–4 messages (buy+sell, plus occasional cancel/new). With 1s hedging deadlines and some headroom, 1–2 symbols concurrently is the safe starting point; we can nudge toward 3 if cancels are rare. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Qusetion round 1_and my comment
+
+“Quote-age” sounds redundant—convince me.
+
+Super simple version: we only trust a spread if both venues have updated “recently” within the same short window (e.g., last 150–200 ms by arrival time in our process). That one check filters out phantom edges that appear when one venue’s tick arrives late; it’s literally just “time since last KRX update” and “time since last NXT update”—two integers compared to a threshold, not heavy plumbing. You can toggle it off later, but it’s low-cost insurance against chasing ghosts. 
+
+Question round 0_and my answer
+
+SLOs in plain English (you asked for “dumbed-down”):
+
+Tick→Signal (<25 ms): how fast we notice the spread.
+
+Signal→OrderSend (<15 ms): how fast we click “buy/sell” once we see it.
+
+OrderSend→Ack (<150 ms): how fast broker says “order received.”
+
+Reject rate (<0.5%): how often broker says “no.”
+
+Timeouts (<0.2%): how often we hear nothing back.
+
+Stale-spread ratio: how often a “good” spread disappears before we can act. Lower is better. 
+
+Qusetion round 1_and my comment
+
+Costs—we’ll bake these into thresholds:
+
+Baselines you shared: NXT 0.0145%, KRX 0.015%, plus 유관기관 ~0.00318% (NXT example). We’ll compute per-leg costs and require edge ≥ (buy fees + sell fees + slippage buffer). 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+Architecture deep-dive (modules, inputs/outputs, dependencies)
+
+Constraint backdrop: 32-bit, single-threaded OpenAPI; we keep Kiwoom calls in one process/thread and push logs/metrics elsewhere. 
+
+Kiwoom_Open_API_guidelines
+
+SessionState
+
+Purpose: Authoritative “are we allowed to trade now?” (+ NXT/KRX overlap gates).
+
+Inputs: Wall-clock; NXT session flags; your fixed window (09:00:32–15:19:50). 
+
+Qusetion round 1_and my comment
+
+Outputs: TRADING_ENABLED boolean + reason.
+
+Depends on: none (config + time).
+
+SymbolMap
+
+Purpose: One canonical code per company; maps to KRX code and NXT code (no AL).
+
+Inputs: Your symbol list.
+
+Outputs: Venue-specific subscription/routing identifiers.
+
+Depends on: Config store.
+
+MarketData
+
+Purpose: Subscribe to per-venue L1 (bid/ask/size) for KRX and NXT; manage screen sharding (≤100 symbols/screen; ≤200 screens total).
+
+Inputs: SymbolMap; Kiwoom real-time API.
+
+Outputs: Normalized ticks (time-stamped on receipt).
+
+Depends on: Throttler (for any on-demand lookups). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+SpreadEngine
+
+Purpose: Compute cross-venue edge per symbol in KRW, tick-size aware; apply freshness gate (simple 2-timer compare); enforce edge ≥ fees + ½–1 tick.
+
+Inputs: MarketData (KRX/NXT L1); Fees model; SessionState.
+
+Outputs: Signal{symbol, sideA, venueA, sideB, venueB, size, expected_edge}.
+
+Depends on: FeesPnL; Config.
+
+Throttler
+
+Purpose: Central rate limiter: orders ≤5/sec; data requests ≤5/sec; queuing & burst smoothing.
+
+Inputs: Any module attempting to call Kiwoom.
+
+Outputs: Admit/deny (with ETA).
+
+Depends on: Clock; Config. 
+
+Kiwoom_Open_API_guidelines
+
+Router
+
+Purpose: Choose order styles per leg (e.g., take on rich side, post limit/mid on cheap side; escalate if no fill).
+
+Inputs: Signal; micro-rules (your 1s hedge deadline).
+
+Outputs: OrderIntents for each leg.
+
+Depends on: SessionState; Throttler; ExecutionGateway.
+
+ExecutionGateway
+
+Purpose: Turn intents into SendOrder/Cancel calls; correlate acks/fills; ensure cancel-then-new when changing order type.
+
+Inputs: OrderIntents; Throttler admission.
+
+Outputs: ExecutionEvents (ack, partial, fill, reject).
+
+Depends on: Kiwoom API.
+
+PairManager (Inventory)
+
+Purpose: Track each paired trade (leg A ↔ leg B), outstanding qty, timers (e.g., 1s); decide escalation (limit→IOC→market).
+
+Inputs: ExecutionEvents; Router policy.
+
+Outputs: New OrderIntents (for hedge/close) or Done.
+
+Depends on: ExecutionGateway; Throttler.
+
+Risk (Guards)
+
+Purpose: Enforce per-symbol concurrency (start with 1–2), notional caps, max unhedged exposure. (We’ll revisit kill-switches later.)
+
+Inputs: PairManager state; ExecutionEvents.
+
+Outputs: Allow/Block; optional Freeze symbol.
+
+FeesPnL
+
+Purpose: Compute per-leg fees (venue-specific) and net edge real-time; roll up PnL.
+
+Inputs: ExecutionEvents; fee tables.
+
+Outputs: PnL metrics back to SpreadEngine & Telemetry. 
+
+수수료 및 세금 정리
+
+Telemetry & Alerts
+
+Purpose: Live dashboard metrics + Slack notifications (trade done, latency breaches, throttle saturation).
+
+Inputs: All above.
+
+Outputs: UI/alerts; logs.
+
+Persistence & Replay (lightweight)
+
+Purpose: Append compact tick snapshots + exec logs for audit and quick playback (honour rate limits and session).
+
+Inputs/Outputs: File store; optional simulator.
+
+End-to-end flow (A→Z):
+MarketData → SpreadEngine (fresh, ≥threshold?) → Router (styles) → Throttler → ExecutionGateway (send) → PairManager (track/escalate ≤1s) → ExecutionEvents → (Risk, FeesPnL, Telemetry) → Done.
+
+Defaults we’ll run with (unless you object)
+
+No AL feed; direct routing only; SOR only in test mode. 
+
+Qusetion round 1_and my comment
+
+ 
+
+Qusetion round 1_and my comment
+
+Window: 09:00:32–15:19:50 hard-gated. 
+
+Qusetion round 1_and my comment
+
+Concurrency: start with 1–2 symbols simultaneously. 
+
+Qusetion round 1_and my comment
+
+Edge: fees + ½–1 tick minimum. 
+
+Qusetion round 1_and my comment
+
+Order style: take-rich (IOC/market), post-cheap (limit/mid); escalate at 1s via cancel-then-new.
+
+If this architecture looks sane, we can next zoom into one of these (your pick):
+
+Execution state machine (exact escalation ladder + timing),
+
+Throttler math (how we budget 5/sec across pairs), or
+
+Edge/fees model (per-venue tables + min-edge computation).
+
+(And yep—no coding here, just shaping the plan.) 
+
+Qusetion round 1_and my comment
+
+Sources
+You said:
+Before we zoom in on the individual modules - I would like to see this architecture in a flow diagram - from the moment we launch the GUI (I assume we will have some gui?) through API log-in and PW input windows (Kiwoom API+ modules that we must do - we gotta make sure this takes place in the right order other wise the rest of the code goes awry) and the beginning of the data flow in and through the end where the execution takes place open position and then closed (all the way through). 
+ChatGPT said:
+Thought for 53s
+
+Got it. Here’s a clear, soup-to-nuts flow you can sanity-check—starting at GUI launch, through Kiwoom login/PW windows in the correct order, then the live data→signal→execution loop, all the way to flat.
+
+Boot & Login Sequence (must happen in this order)
+[User starts GUI]
+      │
+      ▼
+[Load config + env checks]
+  (server=real/sim, symbol list,
+   session window, fee table)
+      │
+      ▼
+[Init Kiwoom OpenAPI control]
+      │
+      ▼
+[Call CommConnect()]
+(Launches Kiwoom login window)
+      │                                              ┌───────────────┐
+      ├──▶ [User enters ID/PW in login window] ───▶  │ Kiwoom server │
+      │                                              └───────┬───────┘
+      │                                                      │
+      ▼                                                      │
+[Wait OnEventConnect]  ◀─────────────────────────────────────┘
+(0 = success; else error code)
+      │  (if fail: show error, allow retry/exit)  :contentReference[oaicite:0]{index=0}
+      ▼
+[Post-login steps]
+  • GetLoginInfo(ACCLIST/USER_ID/…)
+  • (First run or changed device?) ShowAccountWindow to save acct PW
+      via KOA_Functions("ShowAccountWindow","")
+  • Confirm account to trade, server type, etc.  :contentReference[oaicite:1]{index=1} :contentReference[oaicite:2]{index=2}
+      │
+      ▼
+[SessionState arm/disarm]
+  • Subscribe to 장운영구분(FID 215) for NXT P/Q/R/S/T/U/V
+  • Enforce overlap window only (your guard: start 09:00:32, stop 15:19:50)
+  • If outside window → idle (no subs, no orders)  :contentReference[oaicite:3]{index=3} :contentReference[oaicite:4]{index=4} :contentReference[oaicite:5]{index=5}
+      │
+      ▼
+[Register real-time feeds (per venue)]
+  • Shard symbol list across multiple screen numbers
+  • Subscribe L1 for KRX and NXT (no AL feed)         (≤~100 symbols/screen)
+  • Warm-up: verify ticks flow for both venues        :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
+      │
+      ▼
+[Trading Ready]
+
+Live Data → Signal → Execution → Flat (end-to-end)
+            ┌──────────────────────────────────────────────────────────┐
+            │                  MarketData (KRX, NXT)                   │
+            │ Per-venue L1: {bid,ask,size,time_received} for each name │
+            └──────────────┬───────────────────────────────────────────┘
+                           │
+                           ▼
+                 ┌──────────────────────┐
+                 │   SpreadEngine       │
+                 │   • Freshness gate   │  (both venues updated within ~150–200 ms)
+                 │   • Edge calc (KRW)  │  (tick-size aware; fees + ½–1 tick buffer)
+                 └──────────┬───────────┘     :contentReference[oaicite:8]{index=8} :contentReference[oaicite:9]{index=9}
+                            │
+                 [edge ≥ threshold?]
+                   yes │         no │
+                       ▼             ▼
+               ┌────────────┐      [ignore; wait next ticks]
+               │   Router   │
+               │ select per-leg order styles:
+               │  • take on rich side (IOC/market)
+               │  • post on cheap side (limit or NXT mid=29, price=0)
+               └──────┬─────┘     :contentReference[oaicite:10]{index=10} :contentReference[oaicite:11]{index=11} :contentReference[oaicite:12]{index=12}
+                      │
+                      ▼
+               ┌──────────────┐
+               │  Throttler   │  (global caps; budget order TPS)
+               │  • orders bucket (≈5/sec)
+               │  • data-req bucket (≈5/sec)
+               │  • admit/queue/deny
+               └──────┬───────┘             :contentReference[oaicite:13]{index=13}
+                      │
+                      ▼
+         ┌─────────────────────────┐
+         │   ExecutionGateway      │
+         │  SendOrder / Cancel     │  (map venue & type; correlate acks)
+         │  *Type change needs cancel→new*  ───────────────┐
+         └──────────┬──────────────┘                       │  :contentReference[oaicite:14]{index=14}
+                    │                                      │
+                    ▼                                      │
+           [Acks/partials/fills]                           │
+                    │                                      │
+                    ▼                                      │
+         ┌─────────────────────────┐                        │
+         │      PairManager        │◀───────────────────────┘
+         │  Track two legs (A↔B): timers, qty, state
+         │  If unhedged > 1s → escalate:
+         │   limit → IOC → market  (do by cancel then new)
+         │  Done when both legs filled → flat
+         └──────────┬──────────────┘        :contentReference[oaicite:15]{index=15}
+                    │
+                    ├──▶ Fees/PnL (per-leg fees, net bps)  :contentReference[oaicite:16]{index=16}
+                    │
+                    └──▶ Telemetry (latency, rejects, alerts)
+
+Ordering constraints & gotchas (why this order)
+
+Login must be event-driven: You must call CommConnect() and wait for OnEventConnect(0) before doing anything else (queries, real-time regs, orders). That login happens through Kiwoom’s own modal window; you don’t script the credentials. 
+
+Kiwoom_Open_API_guidelines
+
+Account PW window is separate: After login, if the account PW isn’t stored yet you must open the Account Password window (menu or KOA_Functions("ShowAccountWindow", "")) once and save it there. Don’t try to pass PW via code. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Trade only in overlap: Arm the engine only during NXT 메인 09:00:30–15:20 (KRX 09:00–15:20) and your extra guard (start 09:00:32, stop 15:19:50). Use FID 215 events (P/Q/R/S/T/U/V) to flip modes safely. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Qusetion round 1_and my comment
+
+Order styles & mid-price mechanics: NXT 중간가 is 거래구분=29 with price=0; IOC/market families also use price=0. That’s why Router chooses types, not prices, on that leg. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Type changes require cancel→new: Kiwoom doesn’t let you change order kind by “정정”. If a leg hangs, PairManager must cancel and place a new IOC/market to hedge. (Your earlier notes already assume this.) 
+
+Qusetion round 1_and my comment
+
+Throughput realities: Keep a central Throttler; budget around the ~5 orders/sec envelope and shard real-time regs (≈100 symbols/screen)—that’s why we start with 1–2 concurrent symbols for safety. 
+
+Qusetion round 1_and my comment
+
+ 
+
+Qusetion round 1_and my comment
+
+Session cheat-sheet (so GUI states make sense)
+
+NXT: 프리 08:00–08:50 → (시가 대기 08:50–09:00:30) → 메인 09:00:30–15:20 → (종가 대기 15:20–15:30) → 애프터 15:30–20:00. Engine trades only in the overlap with KRX. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+FID 215 signals: P=프리 시작, Q=프리 종료, R=메인 시작, S=메인 종료, T/U/V=애프터 관련. Use these to arm/disarm without relying solely on wall-clock. 
+
+Kiwoom_Open_API_guidelines
+
+If you’re happy with this, I can turn it into a one-page printable diagram next (same flow, just boxes/arrows) and add the minor failure paths (login fail, account-PW not set, wrong server, session not open).
+
+Sources
+You said:
+Looking at the diagram - we can imagine that there will be a heavy load of data on MarketData and SpreadEngine - I know we haven't fully designed each module but we gotta think ahead how we could make them really smart - loading 200 stocks' data input while simultaneously packing each stock's data. How would those modules bring in the data and what are some smart ways to approach this? 
+ChatGPT said:
+Thought for 58s
+
+Great point. If MarketData and SpreadEngine aren’t designed “smart,” 200 names × 2 venues can swamp a single-process, event-driven Kiwoom app. Below is a pragmatic playbook—no code, just concrete patterns—tailored to Kiwoom’s constraints (login/event model, 5 req/s caps, 100 names per screen, special order codes, etc.). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+MarketData: bring data in without drowning
+
+A) Screen sharding that’s deliberate, not random
+
+Shard your 200 names over 3–4 screen numbers (≤100 per screen) so add/remove doesn’t cause churn on a single screen. This respects Kiwoom’s 100 symbols per screen ceiling and avoids local bottlenecks if one shard gets chatty. 
+
+Kiwoom_Open_API_guidelines
+
+B) Pre-allocated per-symbol, per-venue state (no per-tick objects)
+
+For each symbol keep a tiny struct: {krx_bid, krx_ask, krx_sz, nxt_bid, nxt_ask, nxt_sz, t_krx, t_nxt, dirty_flag} with integer prices (KRW), int sizes, monotonic receive-times.
+
+On every tick, mutate the struct in place; do not allocate dicts/tuples or build strings on the hot path.
+
+Mark the symbol dirty only if a top-of-book value actually changed (ignore dup values).
+
+C) Dirty-set + touch-pair gating
+
+Maintain a small dirty set (IDs whose KRX or NXT changed since last eval).
+
+Only push a symbol to SpreadEngine when both venues have “touched” at least once since last decision; that single rule prunes 50–70% of redundant evals in practice. (It’s lighter than a full “quote age” model but preserves the same intent.) 
+
+Qusetion round 1_and my comment
+
+D) Micro-batch on a short cadence (coalesce bursts)
+
+Process the dirty set on a steady 5–10 ms cadence (single pass over dirty symbols, then clear). If 20 ticks arrive for one symbol inside 5 ms, you evaluate once using latest values.
+
+This keeps latency predictable while absorbing micro-bursts without queue explosions.
+
+E) Lightweight freshness check (optional toggle)
+
+If you do want a safeguard against ghost spreads, use a single integer compare: now - t_krx ≤ 150–200 ms and now - t_nxt ≤ 150–200 ms. It’s two counters, not heavy plumbing—and it catches asymmetric lag you can’t control. Your call; we can keep it behind a switch. 
+
+Qusetion round 1_and my comment
+
+F) Subscribe only to what you use
+
+For arb, L1 only (bid/ask/size) on both venues is sufficient; skip AL (merged) to cut noise and confusion, per your preference. 
+
+Qusetion round 1_and my comment
+
+SpreadEngine: compute edges in O(1), not O(names)
+
+G) O(1) edge math per symbol change
+
+When a symbol becomes eligible (dirty & both venues touched), compute just two candidates:
+
+Buy KRX ask vs Sell NXT bid
+
+Buy NXT ask vs Sell KRX bid
+
+Pick the better net after fees/taxes and your buffer (≥ fees(buy+sell) + ½–1 tick). If < threshold → drop. 
+
+Qusetion round 1_and my comment
+
+ 
+
+Qusetion round 1_and my comment
+
+H) Precompute invariants
+
+Tick size table per symbol, fee tables per venue, and (optionally) per-share fee at current price so the threshold is a single addition on the hot path. (NXT ~0.0145%, KRX ~0.015% + 유관기관 as configured.) 
+
+수수료 및 세금 정리
+
+I) Size sanity check up front
+
+Require visible size ≥ intended slice on the taking leg before producing a signal. That alone slashes false starts.
+
+J) Cooldown & hysteresis
+
+After a decline from “tradable” to “not tradable,” keep a short cooldown (e.g., 50–100 ms or 1–2 micro-batches) before re-admitting the same symbol. This avoids thrashing on borderline spreads.
+
+Smart resource allocation (so 200 names feel like 20)
+
+K) Hot/Cold tiers (dynamic focus)
+
+Continuously rank symbols by a cheap score: “# of recent touches * spread magnitude seen.”
+
+Run full SpreadEngine checks every micro-batch for the Top-N (e.g., 40–60) and every 2–3 batches for the rest.
+
+Everyone still stays subscribed, but CPU time is biased toward where edges are most likely right now.
+
+L) Backpressure playbook
+When the dirty set grows too large or a cycle overruns its 5–10 ms budget, degrade gracefully in this order:
+
+Skip cold tier for this cycle;
+
+Widen threshold by +½ tick temporarily;
+
+Temporarily mute symbols that haven’t produced eligible edges in X seconds;
+
+If still behind, raise cadence to 10–15 ms until the queue empties.
+This keeps you real-time without losing control.
+
+Protocol-aware niceties (Kiwoom specifics)
+
+M) Respect the rails
+
+Data requests 5/sec and orders 5/sec are separate buckets—so MarketData should avoid any on-demand TRs during peak flow (rely on real-time; schedule polling for lulls). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+One screen ≤ 100 symbols; don’t pack all 200 on one. Use a handful of screens so a resub on one set doesn’t interrupt everything. 
+
+Kiwoom_Open_API_guidelines
+
+Remember Kiwoom events are asynchronous; order of arrival isn’t guaranteed—another reason to base SpreadEngine on latest snapshot per venue, not on per-event diffs. 
+
+Kiwoom_Open_API_guidelines
+
+N) Session-aware arming
+
+Don’t even register real-time feeds for trading shards until NXT’s 메인 09:00:30–15:20 is active and your guard window opens (09:00:32). Keep a tiny always-on “heartbeat shard” (few names) to detect session transitions via FID 215 without flooding the GUI pre-open. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+How MarketData & SpreadEngine handshake (no code, just roles)
+
+MarketData receives a tick → updates in-place {venue_book, t_venue} → if the value changed, sets dirty_flag=true and records touched={KRX|NXT} for that symbol.
+
+Every 5–10 ms, SpreadEngine takes the dirty set → for each symbol with both venues touched since last eval, it computes net edge (2 checks) using precomputed fees/tick size → if edge ≥ threshold and sizes OK → emit signal; else clear touched and move on.
+
+After the pass, MarketData clears the dirty set atomically and starts a new batch.
+
+This gives you bounded work per batch (only changed names), bounded latency (fixed cadence), and constant-time math per candidate.
+
+Where this buys us headroom
+
+CPU: You’re not doing “200× per tick” work; you only touch symbols that changed and only once per micro-burst.
+
+Latency: Coalescing + O(1) math keeps Tick→Signal within your SLO while avoiding spiky GC churn. 
+
+Qusetion round 1_and my comment
+
+Stability: Session-aware arming avoids waking the whole plant pre-open; screen shards localize resub churn; no AL feed = fewer events. 
+
+Qusetion round 1_and my comment
+
+Quick decisions I’d like from you
+
+Micro-batch cadence: start at 10 ms and tighten later?
+
+Hot-tier size: start with 50 names full-speed?
+
+Freshness toggle: keep the basic 150–200 ms guard as a configurable switch, default ON? (Two integer compares; nearly zero overhead.) 
+
+Qusetion round 1_and my comment
+
+If you’re good with these, I’ll map them into the execution side next (how Router/Throttler/Pairs cooperate so orders stay under 5/sec while still hedging inside ~1 s).
+
+Sources
+You said:
+before I answer your questions - can you reiterate each and every point in a dumbed down version so that I can understand what you are saying? All of it and then I will get to your questions 
+ChatGPT said:
+Thought for 12s
+
+Absolutely—here’s the same plan in “plain English,” point-by-point.
+
+MarketData (how we pull quotes without drowning)
+
+A) Split the watchlist into a few groups.
+Don’t put all 200 symbols on one pipe. Split them across a few “screens” so one noisy group doesn’t choke the rest.
+
+B) Keep a tiny per-symbol notepad and just update it.
+For each stock, store only six numbers (KRX/NXT bid, ask, size) and the time you saw them. When a tick arrives, overwrite the old numbers. No heavy objects, no string building.
+
+C) Only react when something actually changed on either venue.
+If a new tick doesn’t change best bid/ask, ignore it. If it changed, mark that stock as “dirty.” We’ll only re-check dirty ones.
+
+D) Process dirty stocks in tiny bursts every few milliseconds.
+Every ~5–10 ms, look at the current list of dirty stocks once, then clear the list. If 20 ticks came in for the same stock in that window, we still evaluate it only once with the latest values.
+
+E) (Optional) Quick staleness safety check.
+Make sure both KRX and NXT quotes are “fresh” (arrived in the last ~150–200 ms). This avoids chasing spreads created by delayed data. It’s just two “time since last update” checks.
+
+F) Subscribe only to what we need.
+For this arb, we only need top-of-book (best bid/ask/size) on KRX and NXT. Skip extra feeds to reduce noise.
+
+SpreadEngine (how we decide if there’s an edge)
+
+G) Do only two simple comparisons per stock.
+Check (1) buy KRX ask vs sell NXT bid, and (2) buy NXT ask vs sell KRX bid. Take the better one. If the edge (after fees + a small buffer) isn’t big enough, do nothing.
+
+H) Precompute all constants.
+Know each stock’s tick size and each venue’s fees up front, so the decision is just a couple of adds/subtracts—no math gymnastics on the hot path.
+
+I) Don’t signal if there isn’t enough size showing.
+If we want to take 1–10 shares, only signal when the visible size is at least that much.
+
+J) Add a tiny cooldown to stop flip-flopping.
+If a stock just flipped from “tradable” to “not tradable,” wait a brief moment before reconsidering it, so we don’t thrash on borderline spreads.
+
+Smart resource use (so 200 names feel light)
+
+K) Hot vs. cold list.
+Continuously rank stocks by how “active + promising” they look. Check the hot 40–60 stocks every burst; check the rest less often. Everyone still gets data; we just spend more CPU on likely winners.
+
+L) If we start falling behind, degrade gracefully in steps.
+
+Skip the cold list this round.
+
+Temporarily demand a slightly bigger edge (e.g., +½ tick).
+
+Mute totally quiet symbols for a short time.
+
+If still behind, run bursts a bit less frequently (e.g., every 10–15 ms) until we catch up.
+
+Kiwoom-specific habits (so we don’t fight the platform)
+
+M) Respect the rate limits and async nature.
+Orders are capped per second, and data requests are capped separately. Don’t do extra on-demand queries during busy moments; rely on the real-time stream. Assume ticks can arrive out of order and at uneven times; always work off the latest snapshot.
+
+N) Be session-aware.
+Don’t wake the whole system before the true overlap (NXT main session + KRX day session). Keep a tiny “heartbeat” subscription so we know exactly when the session flips on, then bring the full set online.
+
+How MarketData and SpreadEngine work together
+
+MarketData receives ticks and updates the tiny per-symbol notepad; if something changed, mark it dirty.
+
+Every 5–10 ms, SpreadEngine scans the dirty list; if both venues have updated since the last check, it computes edge (two simple comparisons), checks size & threshold, and—if good—emits a trade signal.
+
+Clear the dirty list and repeat.
+
+Why this helps
+
+CPU: We only touch stocks that actually changed—and only once per tiny burst.
+
+Latency: The work done per burst is small and predictable, so we stay fast.
+
+Stability: Session-awareness, small bursts, and simple math keep things smooth even when the tape gets noisy.
+
+The three decisions I asked you (repeated)
+
+Burst timing: OK to start with a 10 ms micro-batch cadence?
+
+Hot-tier size: OK to start with ~50 “hot” stocks per burst?
+
+Freshness guard: OK to keep the 150–200 ms “both quotes must be fresh” check ON by default (and make it a setting you can turn off)?
+
+You said:
+Question round 2_and my answers.txt
+Document
+Here is my comment + answers 
+ChatGPT said:
+Thought for 41s
+
+Crystal. I’ve folded in all your notes and rewrote the design as a lean “V1” that keeps things simple, drops what you don’t want, and clarifies the cooldown bit.
+
+Question round 2_and my answers
+
+What we’re not doing in V1
+
+No “freshness/staleness” filter. We act on whatever the latest quotes are.
+
+No hot/cold tiering. Every symbol is treated the same.
+
+No fancy backpressure ladder. Keep it steady and simple; we’ll only skip work if we truly must.
+
+No AL feed. Per-venue L1 only (KRX + NXT).
+
+No SOR. Venue-direct only.
+
+What we are doing in V1 (simple, steady loop)
+
+Central TR/Order broker (single owner). One module controls all Kiwoom TRs, real-time registrations, orders, and cancels so we never blow rate limits or crash the session.
+
+Screen sharding (minimal). Split the 200 names across a few screens (e.g., 3–4) so a resub in one shard doesn’t touch the others. (Just organizational—no “speed tricks.”)
+
+Per-symbol tiny state. For each symbol, keep just KRX/NXT best bid/ask/size and the most recent receive times; update in place on tick.
+
+Dirty-list + micro-batch. If the best price actually changed on either venue, mark the symbol dirty. Every ~10 ms (tunable later), scan the dirty list once, evaluate, clear it.
+
+Two simple edge checks. For a dirty symbol, compute:
+
+Buy KRX ask vs Sell NXT bid
+
+Buy NXT ask vs Sell KRX bid
+If the better one ≥ (fees round-trip + your ½–1 tick buffer) and visible size ≥ intended slice, emit a signal; else ignore.
+
+Session gate (overlap only). Trade only during your overlap window (e.g., 09:00:32–15:19:50). Outside it, keep subs minimal or off.
+
+Cooldown: why it’s useful (your question answered plainly)
+
+“Are we cooling down just because a spread flashed briefly and vanished? How does that help?”
+
+Problem without cooldown: On borderline names, spreads can flicker around your threshold across consecutive micro-batches (up, down, up, down…). If we immediately re-arm on every flicker, we churn signals and waste our 5 orders/sec budget on noise—making it harder to hedge when a real edge appears a split-second later.
+
+Tiny cooldown = “don’t flip-flop.” After a symbol falls below the threshold (or after we just tried and backed off), we wait a very short time (e.g., one batch ≈ 10 ms, not seconds) before re-considering it.
+
+This doesn’t “filter stale data”—it just prevents thrash so we don’t spam cancels/re-orders on a spread that’s oscillating at the tick boundary.
+
+It saves false flags by forcing the edge to persist for one micro-batch before we spend an order slot again. If a real edge is there, it’ll still be there 10 ms later; if it was a momentary blip, we avoided burning throughput.
+
+(If you’d rather skip cooldown entirely in V1, we can—just expect more flip-flop on borderline names and higher throttle usage. Your call.)
+
+Minimal fallback behavior (only if we start slipping)
+
+If a batch runs long or the dirty list explodes (rare), we do just one simple thing in V1: process fewer dirty symbols this cycle (FIFO) and finish the rest in the next cycle. No threshold bumping, no muting—keep it dumb and predictable.
+
+Steady-state V1 flow (end-to-end, no frills)
+
+Data in: Per-venue L1 updates arrive → we overwrite the tiny per-symbol state → mark symbol dirty only if best price changed.
+
+Batch tick (~10 ms): Grab the current dirty list → for each entry, run the two edge checks → if edge ≥ (fees + buffer) and size OK ⇒ emit signal; else ignore. Clear the dirty list.
+
+Route & execute (simple policy):
+
+Take the rich side with IOC/market to lock hedge.
+
+Post limit (or NXT mid) on the cheap side; if not filled quickly, cancel→IOC/market to flatten.
+
+Inventory rule: Always end flat; keep outstanding size tiny (your micro-slicing).
+
+Repeat.
+
+Dials we leave open (decide later with real data)
+
+Micro-batch cadence (~10 ms is just a starting point; we’ll discover the sweet spot in testing).
+
+Exact cooldown length (0 ms if you want none; or 10–20 ms to dampen flapping).
+
+Edge buffer (½–1 tick current default; tune per symbol later).
+
+Max concurrent symbols (start very low; increase carefully under the 5 orders/sec cap).
+
+If this trimmed V1 matches your intent, I’ll keep building the next piece around it (Execution & Throttling choreography that obeys the 5/sec cap while still hedging within ~1 s)—still simple, still modular, no extra bells.
+
+Sources
+You said:
+Okay - I'm okay with the cooldown method you are suggesting but we should leave an extensive note around what your design is for future references since I don't completely understand the concept for now. 
+
+What are you suggesting to work on next exactly? again no coding 
+ChatGPT said:
+Thought for 18s
+
+perfect—i’ll park a clear, self-contained “cooldown design note” here for future you, then propose the single next topic I think we should tackle (no code, just specs).
+
+Cooldown Design Note (for later you)
+
+One-liner. After a symbol drops below the trade threshold or we back off from an attempt, we wait a tiny, fixed time before reconsidering it—so we don’t flip-flop and burn our 5 orders/sec budget on noise.
+
+Where it lives
+
+Between SpreadEngine and the next time a symbol is re-eligible for evaluation.
+
+It does not delay the first opportunity; it only delays re-admissions after a just-miss / back-off.
+
+Why we need it
+
+Borderline spreads often bounce around ±½–1 tick; without a guard, we’d trigger/abort/trigger/abort rapidly.
+
+That thrash consumes order slots and cancels, raising reject/timeouts and risking late hedges elsewhere.
+
+What it is (precisely)
+
+Per-symbol variable: next_eligible_at (a timestamp).
+
+When a symbol becomes ineligible (edge < threshold, size disappeared, we canceled a pending attempt, or we just finished a fail), set:
+
+next_eligible_at = now + cooldown_ms
+
+On each micro-batch, if now < next_eligible_at, skip that symbol’s decision step (no signals, no orders).
+
+Defaults & knobs
+
+cooldown_ms: start at 10 ms (range 0–20 ms). 0 ms = feature “off”.
+
+Scope: applies after any of: (a) spread fell below threshold, (b) size insufficient, (c) cancel-then-new fallback fired, (d) order reject on that symbol.
+
+Exemptions (optional later): allow a “strong edge override” (e.g., if edge ≥ threshold + 1 extra tick, bypass cooldown).
+
+Interactions
+
+Rate limits: lowers bursts of cancel/new → smoother <5 TPS usage; helps the hedging leg get priority when needed.
+
+Latency: adds at most ~10 ms delay only after a “no” or “back-off”; first chances and strong, persistent edges are unaffected.
+
+Session gating: cooldown is ignored when trading is disarmed (e.g., outside overlap); re-armed with a clean slate.
+
+Metrics to watch
+
+Cooldown deferrals/sec (how often we skipped a symbol due to cooldown).
+
+Flip-flop rate: number of “eligible→ineligible→eligible” oscillations per symbol/min.
+
+Orders/sec & cancel ratio: should drop when cooldown is ON.
+
+Hedge lateness (unhedged > X ms): should improve when thrash falls.
+
+Logging (short, actionable)
+
+COOLDOWN_ARMED sym=005930_NX dur=10ms reason=below_threshold
+
+COOLDOWN_SKIP sym=005930 now=... until=...
+
+COOLDOWN_CLEAR sym=005930 reason=strong_edge_override (if we ever add the override)
+
+Edge cases & trade-offs
+
+Risk of “just missed” fills: we might forgo an immediate re-try if a fleeting edge snaps back within the 10 ms window; empirically, this prevents more churn than it costs.
+
+Burst markets: if edges persist across multiple batches, cooldown does nothing (we keep firing normally).
+
+Partial fills: cooldown doesn’t interfere with PairManager; escalation (limit→IOC→market) proceeds on its own timers.
+
+Future evolutions (only if needed)
+
+Adaptive cooldown: 0–20 ms based on each symbol’s recent flip-flop rate.
+
+Hysteresis: require edge ≥ threshold for 1 batch before arming a new signal; or “enter at T+½ tick, exit at T−½ tick”.
+
+What I suggest we work on next (exactly)
+
+Topic: Pair-Level Execution State Machine & Throttling Budget (no code)
+
+Deliverable: a precise, text-only spec covering:
+
+States for a single paired trade (e.g., Idle → Candidate → LegA_Sent → LegA_Filled → LegB_Sent → Hedged → Flat, plus Escalating, Canceled, Rejected).
+
+Transitions & timers (the 1-second hedge deadline, when we go cancel→IOC→market, when we give up).
+
+Order-type choices per transition (direct venue only; when to use limit / IOC / market / NXT mid).
+
+Throttle budget under the 5 orders/sec cap:
+
+Per-symbol cap (e.g., max in-flight pairs),
+
+A global bucket with reserve for cancels,
+
+Back-pressure rules (what we stop doing first when we’re near the cap).
+
+Failure paths and kill conditions (e.g., 3 rejects in 60s → freeze symbol 60s; unhedged exposure timeout → force-hedge & freeze).
+
+Telemetry for ops (latency SLOs, reject/timeout counters, hedge lateness, symbol freeze events).
+
+Why this first: it locks in how we stay flat, fast, and inside rate limits—the core of “don’t blow up while arbing.” With this spec set, every other module (Router, Risk, Telemetry) snaps into place.
+
+If that sounds right, I’ll draft the state list + transition table + throttle budget (all prose/diagrams, zero code) next.
+
+You said:
+okay go ahead
+ChatGPT said:
+Thought for 1m 21s
+
+Fantastic—here’s the promised Pair-Level Execution State Machine (v1) and the Global Throttling Budget (v1), written plainly, no code. I’ve tied key rules back to your docs so this can roll straight into the planning spec later.
+
+Pair-Level Execution State Machine (v1)
+What one “arb attempt” does (one stock, one direction)
+
+Goal: buy on the cheap venue and sell on the rich venue (or the reverse), in tiny slices (your pilot: 1 share, up to 10 shares per symbol outstanding). 
+
+Question round 0_and my answer
+
+ 
+
+Question round 0_and my answer
+
+Order types available (Kiwoom): regular KRX SendOrder(); NXT-direct via 21=NXT매수 / 22=NXT매도 / 23=NXT취소 / 25=NXT정정. Mid-price (“중간가”) uses 호가구분=29 with price=0. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+We cannot change order type by ‘정정’: to switch limit→market we must cancel & send a new order. 
+
+Kiwoom_Open_API_guidelines
+
+States (per symbol, per tiny slice)
+[IDLE]
+  ↓ (SpreadEngine emits signal; session ON; throttler admits)
+[CANDIDATE]
+  ↓ (admitted: we have tokens to place both legs; see Throttling)
+[ENTRY_TAKE_SENT]         -- Send IOC/market on the rich side to lock hedge
+  ↓ (OnReceiveChejan: 접수/체결 events)                     ── Kiwoom event flow
+[ENTRY_TAKE_FILLED?]  ──────────────── yes ───────────────→  [HEDGE_POST_SENT]
+       │ no (reject/timeout)                                 (limit or mid on cheap side)
+       ├─> [ENTRY_REJECTED] → [COOLDOWN] → [IDLE]
+       └─> [ENTRY_TIMEOUT]  → [COOLDOWN] → [IDLE]
+                                       (cooldown: tiny pause; see below)
+
+[HEDGE_POST_PENDING]
+  ↓ (fill arrives within t_hedge) → [PAIRED_DONE]
+  ↓ (no fill by t_hedge)
+[CANCEL_POST_SENT]  → (ack) → [HEDGE_IOC_SENT] → [PAIRED_DONE]
+                                  (force-hedge at IOC/market)
+
+What each state listens for
+
+All order life-cycle comes from Kiwoom events: order accepted, fills, and balance updates arrive via OnReceiveChejan (order→접수→체결→잔고…). Use these to transition states. 
+
+Kiwoom_Open_API_guidelines
+
+Order success/failure on send: if OnReceiveTrData returns a non-empty order number, send was accepted; empty means failed. Treat failures as immediate REJECTED. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Simple timers & thresholds (initial defaults—easy to tune)
+
+t_hedge (wait for passive hedge fill): 1,000 ms. If not filled, cancel-and-IOC the hedge leg (per your “sell→market after ~1s” intent, implemented as cancel+new). 
+
+Question round 0_and my answer
+
+Cooldown after a miss/reject: 100–200 ms per symbol before reconsidering; prevents flip-flop on a flickery spread (this is the simple “cooldown method” you okayed).
+
+Max concurrent slices per symbol (pilot): 1 outstanding pair at a time; total outstanding ≤10 per symbol over short bursts (matches your pilot cap). 
+
+Question round 0_and my answer
+
+Order styles in the state machine (plain)
+
+ENTRY_TAKE_SENT: use IOC/market on the rich side to secure the hedge quickly. (IOC codes are available; market/IOC need price=0.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+HEDGE_POST_SENT: place a limit (or mid, 호가 29) on the cheap side to earn the edge; if it doesn’t fill by t_hedge, we cancel & IOC. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Session guardrails (keep engine armed only in overlap)
+
+Trade only when both are live: KRX 09:00–15:20; NXT main roughly 09:00:30–15:20. You asked for an extra buffer: start 09:00:32, stop 15:19:50. Gate the state machine behind this. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+Qusetion round 1_and my comment
+
+Global Throttling Budget (v1)
+
+Kiwoom has separate per-second caps for orders and data requests, and hard limits on real-time registrations per screen:
+
+Orders: 5 per second across SendOrder/SendOrderCredit/SendOrderFO. Over the cap returns an error (e.g., “-308”). Cancels count as orders. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Data requests: 5 per second (CommRqData, CommKwRqData, SendCondition), plus a separate server-load guard that can clamp harder. We avoid queries on the hot path. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Real-time subscriptions: ≤100 symbols per screen number (SetRealReg). Use multiple screen numbers to cover ~200 names. 
+
+Kiwoom_Open_API_guidelines
+
+Token model (simple and safe)
+
+Two buckets, globally:
+
+OrdersBucket: capacity 5 tokens/sec.
+
+QueryBucket: capacity 5 tokens/sec (not used while running; only for setup/ops).
+
+Reservation for safety: Keep 2 tokens always reserved for urgent cancels/hedges. New arb entries may only proceed if OrdersBucket free ≥ 2 (entry) + 2 (reserve). This ensures we can always cancel & hedge if needed (because type changes require cancel+new). 
+
+Kiwoom_Open_API_guidelines
+
+Estimated token spend per slice (worst-case):
+
+Entry take = 1; Post hedge = 1; Cancel post = 1; Hedge IOC = 1 ⇒ ~4 tokens max.
+
+With a 5/sec cap, this strongly suggests at most 1 new slice per second if we want continuous headroom (your “keep it simple” bias).
+
+Global concurrency cap (pilot): ≤2 symbols active simultaneously, ≤1 outstanding slice per symbol. This matches your intuition and keeps us well within 5/sec including cancels. 
+
+Qusetion round 1_and my comment
+
+Admission checks (what the throttler enforces)
+
+Before moving CANDIDATE → ENTRY_TAKE_SENT:
+
+Session ON and within your overlap window. 
+
+Qusetion round 1_and my comment
+
+Edge ≥ fees + buffer (we’ll start “≥1 tick net after fees,” per your comfort). 
+
+Question round 0_and my answer
+
+ 
+
+Qusetion round 1_and my comment
+
+ 
+
+수수료 및 세금 정리
+
+Visible size ≥ intended slice. 
+
+Question round 2_and my answers
+
+OrdersBucket has ≥ 4 free tokens (2 to place both legs + 2 reserved for potential cancel/hedge).
+
+Per-symbol outstanding slices < cap (pilot: 1). 
+
+Question round 0_and my answer
+
+Back-pressure (what happens under stress)
+
+Rate-limit error on send (e.g., “-308”): mark the symbol COOLDOWN for ~250 ms, return tokens if not accepted, and re-queue the signal if it’s still valid later. 
+
+Kiwoom_Open_API_guidelines
+
+Query throttling: We don’t issue any CommRqData during bursts; rely on real-time feeds (your requirement: one module owns all TRs and enforces these caps centrally). 
+
+Question round 2_and my answers
+
+Tiny glossary (so future readers don’t get lost)
+
+Take / Post: “Take the rich side” means hit the bid or lift the offer on the venue that’s worse for us to secure the hedge; “Post the cheap side” means place a passive order where we’re getting the good price.
+
+IOC / Market: IOC tries immediately and cancels any unfilled remainder; market sends at touch with price=0 for market-type hoga codes. 
+
+Kiwoom_Open_API_guidelines
+
+중간가(호가 29): NXT mid-price order; you set hoga=29 and price=0. We’ll use it only on the passive/cheap leg and only when the spread after fees is safely positive. 
+
+Kiwoom_Open_API_guidelines
+
+What I need you to confirm (quick toggles)
+
+t_hedge = 1,000 ms (then cancel & IOC the hedge). OK? (Implements your “sell→market after ~1s” via cancel+new.) 
+
+Question round 0_and my answer
+
+Cooldown = 100–200 ms per symbol after a miss/reject. OK?
+
+Concurrency (pilot): ≤ 2 symbols trading at once; 1 active slice per symbol, ≤10 total slices per symbol over time. OK? 
+
+Question round 0_and my answer
+
+Edge rule (pilot default): “≥ 1 tick net after fees” (per-symbol overrides later). OK? 
+
+Question round 0_and my answer
+
+ 
+
+Qusetion round 1_and my comment
+
+If you’re good with these, next I’ll draft the ExecutionGateway message map (what we log for each state transition, the exact fields we store per slice, and how we correlate Kiwoom OnReceiveChejan events to state), still no code—just the contract.
+
+Sources
+You said:
+go ahead
+ChatGPT said:
+Thought for 38s
+
+Awesome—here’s the ExecutionGateway message map & event-correlation spec (V1). No code; just the contract your modules will follow so every order, ack, fill, cancel, and reject is unambiguous and pairable.
+
+1) Scope (what ExecutionGateway owns)
+
+Turns OrderIntents (from Router/PairManager) into Kiwoom calls (send/cancel).
+
+Correlates all downstream events from Kiwoom (TR acks, Chejan order/fill/balance, server messages).
+
+Emits clean, typed ExecutionEvents back to PairManager/Risk/Telemetry.
+
+Enforces “cancel→new if order-type changes” (because type changes via 정정 are not supported). 
+
+Kiwoom_Open_API_guidelines
+
+2) Upstream inputs (from Router / PairManager)
+
+OrderIntent (per leg)
+Fields:
+
+pair_id (UUID), leg (A or B), symbol (KRX code; NXT code if applicable), venue (KRX | NXT),
+
+side (BUY | SELL), qty,
+
+order_style (limit | ioc | market | mid),
+
+hoga_code (mapped by Router: e.g., 00=지정가, 03=시장가, 10=지정가IOC, 13=시장가IOC, 29=중간가),
+
+price (KRW; 0 if market/IOC/mid),
+
+screen_no (shard), account.
+
+(Reference hoga codes incl. NXT mid-price=29, IOC types 10/13, market 03. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+)
+
+3) Outbound send/cancel attempts (what we record at send-time)
+
+OrderSendAttempt (created before calling Kiwoom)
+
+ts_send (monotonic), pair_id, leg, venue, symbol,
+
+side, qty, hoga_code, price, screen_no,
+
+cl_ord_id (our client-generated ID),
+
+api_fn (SendOrder for KRX; NXT: 21/22/23/25 types), rq_name, tr_code (if applicable). 
+
+Kiwoom_Open_API_guidelines
+
+CancelSendAttempt (for cancels/replace)
+
+same metadata + orig_order_no if known; NXT cancel uses 23 (NXT취소). 
+
+Kiwoom_Open_API_guidelines
+
+4) Immediate TR response (acknowledgement of send)
+
+Kiwoom’s TR response tells us if the order was accepted by the server:
+
+If OnReceiveTRData yields a non-empty “주문번호”, treat as OrderAck; empty = failure. Fields:
+
+ts_ack, pair_id, leg, cl_ord_id, order_no (주문번호), screen_no. 
+
+Kiwoom_Open_API_guidelines
+
+OrderReject (TR level)
+
+If OnReceiveTRData has empty 주문번호, emit OrderReject with reason_src="TR"; also capture any OnReceiveMsg text that arrives (server says why). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ServerMessage
+
+Independently, OnReceiveMsg contains human-readable diagnostics (e.g., input error, margin, rate-limit). Log as a side-channel and link by screen_no/rq_name. 
+
+Kiwoom_Open_API_guidelines
+
+5) Chejan stream (the authoritative lifecycle)
+
+After a successful send, all order/position changes come via Chejan:
+
+Event order: 주문→접수→체결1→잔고1→…→체결n→잔고n (and for 정정/취소, 접수 뒤에 “확인” 신호 추가). 
+
+Kiwoom_Open_API_guidelines
+
+sGubun meaning: 0 = 접수/체결, 1 = 잔고변경 (국내주식). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+FID fields we read (subset):
+
+9203 주문번호, 904 원주문번호, 9001 종목코드, 913 주문상태, 905 주문구분, 906 매매구분, 907 매도수구분,
+
+902 미체결수량, 910 체결가, 911 체결량, 909 체결번호, 908 주문/체결시간,
+
+919 거부사유 (if any). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ExecutionEvents derived from Chejan
+
+OrderAccepted (sGubun=0 + 주문상태=접수):
+ts, pair_id, leg, order_no, status, leaves_qty (=미체결수량). 
+
+Kiwoom_Open_API_guidelines
+
+TradePartial / TradeFill (sGubun=0 with 체결량/체결가):
+ts, pair_id, leg, order_no, exec_id(체결번호), fill_px(910), fill_qty(911),
+cum_qty(derive), leaves_qty(902), side, venue. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+PositionUpdate (sGubun=1):
+ts, symbol, qty_after, avg_cost (잔고 FIDs—useful for PnL alignment). 
+
+Kiwoom_Open_API_guidelines
+
+OrderCancelAck / CancelReject
+
+From Chejan: look for 원주문번호 and status change; also watch OnReceiveMsg for rejections. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+OrderReject (Exchange-level)
+
+When 919 거부사유 appears or server message indicates refusal. Fields: reason_code (if present), reason_text (from OnReceiveMsg). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Mandatory correlation keys we use
+
+Primary: 주문번호 (9203) ↔ our cl_ord_id.
+
+Secondary: 원주문번호 (904) (for cancels/replace), 종목코드 (9001) to sanity-check routing. 
+
+Kiwoom_Open_API_guidelines
+
+6) Timeouts & “no news” rules
+
+TR Ack timeout: if no 주문번호 arrives from TR within 200 ms, emit OrderReject(reason=TR_TIMEOUT) and stop tracking cl_ord_id. (You’ll still log any late OnReceiveMsg.) 
+
+Kiwoom_Open_API_guidelines
+
+Chejan silence: after an accepted order, if no Chejan 접수 within 300 ms, emit OrderStuck (telemetry only) and let PairManager decide (e.g., cancel).
+
+Cancel timeout: if cancel sent but no cancel-ack within 300 ms, raise CancelStuck (so PairManager can force-hedge on the other leg if needed).
+
+(These numbers are starting points—aligned to your 1s hedge deadline; they’re easy to tune later.)
+
+7) What we guarantee to PairManager (contract)
+
+For each leg, ExecutionGateway will always ultimately emit one of:
+
+OrderReject (TR or exchange level),
+
+TradeFill (with cum_qty = qty; followed by PairedDone once both legs are flat),
+
+Canceled (and—if escalation—PairManager will immediately create a new OrderIntent for IOC/market).
+
+No silent failures. Every outbound attempt becomes either an Ack/Fill/Cancel/Reject, or a timeout event that PairManager can act on.
+
+8) Minimal log schema (ops & audit)
+
+For each event we store one line with (at minimum):
+
+ts, event_type, pair_id, leg, venue, symbol,
+
+order_no (if known), orig_order_no (if cancel),
+
+side, qty, hoga_code, price,
+
+leaves_qty (if provided), fill_qty, fill_px, exec_id,
+
+screen_no, rq_name, tr_code (if TR-origin),
+
+sGubun (Chejan), selected FIDs (9203/904/913/902/910/911/909/919/908),
+
+message_text (from OnReceiveMsg when present).
+
+(Those FIDs are exactly the ones Kiwoom documents for Chejan. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+)
+
+9) Rate-limit interaction (so we don’t trip 5/sec)
+
+ExecutionGateway never calls Kiwoom directly without asking Throttler for tokens (orders bucket: 5/sec). Cancels count as orders. 
+
+Kiwoom_Open_API_guidelines
+
+We keep 2 tokens reserved for urgent cancel/hedge (since changing type requires cancel→new). PairManager only admits new entries if the bucket has enough free tokens plus the reserve. 
+
+Kiwoom_Open_API_guidelines
+
+10) Venue & order-type specifics (what we pass down)
+
+Venue routing:
+
+NXT: use NXT-specific order types 21/22/23/25 (매수/매도/취소/정정).
+
+KRX: regular SendOrder. 
+
+Kiwoom_Open_API_guidelines
+
+Mid-price on NXT: set 호가=29 and price=0 (passive); IOC/시장가 orders also use price=0. 
+
+Kiwoom_Open_API_guidelines
+
+11) Session guard (when we refuse to send)
+
+ExecutionGateway rejects any OrderIntent when outside the overlap window (your guard: start 09:00:32, stop 15:19:50), or when NXT main session is not active (메인 09:00:30–15:20 per NXT table). Emit OrderRefused(reason=SESSION_OFF). 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+12) What PairManager should do with these events (at a glance)
+
+On OrderAck → wait for Chejan 접수/체결 updates.
+
+On TradePartial → update remaining qty; keep timers running.
+
+On t_hedge timeout with leaves_qty>0 → issue CancelSendAttempt then new IOC/market for hedge leg. (Type change via cancel→new is required.) 
+
+Kiwoom_Open_API_guidelines
+
+On OrderReject → apply cooldown for that symbol; consider re-evaluating when SpreadEngine emits again.
+
+On PairedDone (both legs filled) → mark pair complete; emit to PnL (fees model uses venue-specific rates). 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+Sanity checklist (for implementation later)
+
+ Every outbound attempt has a cl_ord_id and a log row.
+
+ We do not proceed on empty 주문번호 from TR. 
+
+Kiwoom_Open_API_guidelines
+
+ Chejan routing uses 주문번호 as the primary key and 종목코드 as a guard. 
+
+Kiwoom_Open_API_guidelines
+
+ All cancels/replace are counted against the 5/sec bucket. 
+
+Kiwoom_Open_API_guidelines
+
+ NXT mid/IOC/market price=0 rule is obeyed. 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+If this looks right, the next logical piece is Telemetry & Ops views: exactly which counters and latencies we’ll expose (Tick→Signal, Signal→Send, Send→Ack, fills, rejects, cancel ratio, unhedged time), and the minimal alerts you want firing during live runs.
+
+Sources
+You said:
+okay go ahead
+ChatGPT said:
+Thought for 23s
+
+Awesome—here’s a clean, Telemetry & Ops spec (V1) you can lift straight into the planning doc. No code—just what we’ll track, how we’ll compute it, what you’ll see on the GUI, and what pings you in Slack.
+
+1) Anchor constraints we must observe
+
+Orders limit: 5 per second globally (KRX/NXT orders & cancels all count). 
+
+Kiwoom_Open_API_guidelines
+
+Data-request limit: 5 per second, with an extra server-load guard that can clamp tighter. (We avoid queries during trading.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Real-time reg cap: ≤ 100 symbols per screen number (we’ll shard ~200 names across a few screens). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Sessions: Trade only when KRX 09:00–15:20 overlaps with NXT 메인 09:00:30–15:20 (your guard: start 09:00:32, stop 15:19:50). NXT sessions are P…V via FID 215. 
+
+🕒 NXT(넥스트레이드) 대체거래소 거래시간
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+Order-type facts: NXT 중간가 uses 호가=29 with price=0; IOC/시장가 also price=0. (We’ll reflect this in metrics/labels.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+2) Latency SLOs (targets) & how we measure them
+
+We’ll compute per-event timestamps from the ExecutionGateway messages we just defined (send attempts, TR acks, Chejan fills).
+
+Core SLOs (targets):
+
+Tick → Signal (p95 < 25 ms): time from last top-of-book change (either venue) to SpreadEngine signal. (Source: MarketData tick receipt time vs. signal time.) 
+
+Qusetion round 1_and my comment
+
+Signal → OrderSend (p95 < 15 ms): time from signal to OrderSendAttempt.ts_send. 
+
+Qusetion round 1_and my comment
+
+OrderSend → TR Ack (p95 < 150 ms): time from ts_send to TR 주문번호 reception. 
+
+Qusetion round 1_and my comment
+
+Execution timings (for hedging quality):
+
+Entry take → first fill: ts of TradeFill − ts_send.
+
+Hedge posted → hedged (flat) time: ts of PairedDone − ts of HEDGE_POST_SENT (should be ≤ t_hedge = 1000 ms default). 
+
+Question round 2_and my answers
+
+3) Reliability & quality KPIs (targets)
+
+Reject Rate < 0.5% (rolling 5 min). Count OrderReject / all sends. 
+
+Qusetion round 1_and my comment
+
+Timeout Rate < 0.2% (rolling 5 min). TR ack/chejan timeouts divided by sends. 
+
+Qusetion round 1_and my comment
+
+Unhedged time (p95): time a pair spends with only one leg filled (goal: < 1,000 ms; aligns to your hedge deadline). 
+
+Qusetion round 1_and my comment
+
+Orders/sec utilization: rolling 1-sec max vs limit=5; we try to stay < 80% except brief spikes. 
+
+Kiwoom_Open_API_guidelines
+
+Throughput safety: “tokens free” (orders bucket) never < 2 (reserved for cancel/hedge). (Design choice from our gateway spec.)
+
+4) Profitability & costs (live and end-of-day)
+
+Per-trade edge (KRW & bps): realized sell_px − buy_px − fees(buy+sell).
+
+Fees model: venue-specific: NXT 0.0145%, KRX 0.015%, plus 유관기관 (NXT ~0.0031833%) as configured. Display estimated fees before fill, and actual fees after. 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+PnL rollups: per-leg, per-pair, per-symbol, and session totals; show bps per trade and KRW.
+
+5) What appears on the GUI (three views)
+A) Live Ops Overview (top bar + tiles)
+
+Session status: NXT: R/S/U/V + clock; “Armed” only inside your guard window. 
+
+Kiwoom_Open_API_guidelines
+
+Orders/sec meter: 60-sec sparkline, hard line at 5. 
+
+Kiwoom_Open_API_guidelines
+
+Data-requests/sec meter: separate from orders (should be quiet during trading). 
+
+Kiwoom_Open_API_guidelines
+
+Active symbols: count & list (since you cap concurrency very low in V1). 
+
+Qusetion round 1_and my comment
+
+Latency gauges: current p95 for the 3 SLOs above. 
+
+Qusetion round 1_and my comment
+
+B) Symbol Drilldown Table (one row per active name)
+
+Columns:
+
+Edge now (bps / KRW), Visible sizes (KRX/NXT), Our intended slice, State (Idle/Candidate/Entry/Hedge/Flat), Unhedged time (ms), #Rejects(5m), #Timeouts(5m), Tokens free (global).
+
+Last action (e.g., HEDGE_POST_SENT, CANCEL_SENT, HEDGE_IOC_SENT).
+
+Fees estimate per pair (bps & KRW). Fee rates pulled from your table. 
+
+수수료 및 세금 정리
+
+C) Post-Session Report (downloadable summary)
+
+Totals: #pairs, fill rate, avg edge (bps), fees paid, net PnL.
+
+Per-symbol league table: trades, PnL, avg unhedged time, reject/timeout rates.
+
+Bottleneck snapshot: time spent ≥80% orders/sec, average tokens free, most frequent reject reasons (from OnReceiveMsg). 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+6) Slack alerts (concise, actionable)
+
+We’ll keep these short messages with a link to the GUI row.
+
+Latency breach (p99) for 60s
+“⚠️ Latency: Tick→Signal p99 48ms (target 25). Check CPU/load.” 
+
+Qusetion round 1_and my comment
+
+High orders/sec utilization
+“⚠️ Throttle: Orders/sec 4.3/5 for 5s. Holding new entries; keeping 2 tokens for cancel/hedge.” 
+
+Kiwoom_Open_API_guidelines
+
+Hedge timeout (per pair)
+“⛑️ Hedge timeout: 005930 (KRX/NXT) >1000ms. Cancel→IOC fired.” (Matches your 1s rule.) 
+
+Qusetion round 1_and my comment
+
+Reject spike
+“🧱 Rejects: 3 in 60s on 035420. Auto-cooldown 200ms; review route/size.” (Kill-switches deferred; we only notify.) 
+
+Qusetion round 1_and my comment
+
+Session change (FID 215)
+“🕒 NXT: R (메인 시작). Trading armed.” 
+
+Kiwoom_Open_API_guidelines
+
+7) Minimal calculations (where each metric comes from)
+
+Edge now (bps/KRW): from best bid/ask (both venues) minus fees(buy+sell) you configured. 
+
+Qusetion round 1_and my comment
+
+ 
+
+수수료 및 세금 정리
+
+Tick→Signal: MarketData tick timestamp vs Signal timestamp.
+
+Signal→OrderSend: OrderSendAttempt.ts_send − Signal.ts.
+
+Send→TR Ack: first TR 주문번호 time − ts_send (or timeout). 
+
+Qusetion round 1_and my comment
+
+Unhedged time: PairedDone.ts − first_leg_fill.ts.
+
+Orders/sec: size of OrderSendAttempt events per rolling second (includes cancels). 
+
+Kiwoom_Open_API_guidelines
+
+Reject/Timeout rates: counts of OrderReject/Timeout divided by OrderSendAttempt per 5 min. 
+
+Qusetion round 1_and my comment
+
+8) Defaults & on/off switches (V1 simplicity)
+
+Kill-switches: OFF in V1; we only surface advisories (you asked to revisit later). 
+
+Qusetion round 1_and my comment
+
+Cooldown: ON (100–200 ms) and logged (why/when armed).
+
+Hot/Cold tiering: OFF in V1 (your preference). 
+
+Question round 2_and my answers
+
+Freshness/quote-age filter: OFF in V1 (your preference). 
+
+Question round 2_and my answers
+
+9) “When X happens, do Y” (micro-runbook)
+
+Orders/sec ≥ 4 for >5s: pause new entries; let hedges/cancels use the reserved tokens; resume when <3/sec. (Stays within 5/sec and protects hedging.) 
+
+Kiwoom_Open_API_guidelines
+
+p95 Send→Ack > 150 ms for >1 min: reduce concurrency (e.g., 2 → 1 symbol) and/or widen edge buffer by +½ tick until normal. 
+
+Qusetion round 1_and my comment
+
+Hedge timeout spikes: temporarily shorten t_hedge (e.g., 1000 → 700 ms) so we escalate to IOC/market quicker. 
+
+Qusetion round 1_and my comment
+
+Reject spike on one name: apply per-symbol cooldown 200 ms; if it persists, stop posting mid/limits and go IOC only on the hedge leg for that name (manual toggle). 
+
+Qusetion round 1_and my comment
+
+10) Minimal logging we need (so metrics are computable)
+
+Each log line (send/ack/fill/cancel/reject) carries: ts, event_type, pair_id, leg, venue, symbol, order_no, orig_order_no, side, qty, hoga_code, price, leaves_qty, fill_qty, fill_px, exec_id, screen_no, rq_name, tr_code, sGubun, key FIDs (9203/904/913/902/910/911/909/919/908), message_text. (These are the Chejan/TR fields Kiwoom exposes.) 
+
+Kiwoom_Open_API_guidelines
+
+ 
+
+Kiwoom_Open_API_guidelines
+
+11) What decisions I still need from you (quick yes/no)
+
+Keep the SLO targets as written (25/15/150 ms) for V1 dashboards? 
+
+Qusetion round 1_and my comment
+
+Show orders/sec utilization with a red band at ≥80% and auto-pause new entries when sustained for 5s? (Advisory now; full kill-switch later.) 
+
+Qusetion round 1_and my comment
+
+Lock t_hedge = 1000 ms in the GUI as the default (editable control), with Slack alert on any timeout? 
+
+Qusetion round 1_and my comment
+
+Confirm the fee rates we’ll display by default: NXT 0.0145%, KRX 0.015%, NXT 유관기관 ~0.0031833% (you can edit them in config). 
+
+수수료 및 세금 정리
+
+ 
+
+수수료 및 세금 정리
+
+If this all looks good, next I’ll propose the GUI layout wireframe (what panels, tables, and fields appear and where)—still text-only and tied to these metrics.
+
+Sources
+You said:
+Keep the SLO targets as written (25/15/150 ms) for V1 dashboards? 
+
+***<I have no way to tell if that's reasonable or not - let's start with your numbers>***
+
+Show orders/sec utilization with a red band at ≥80% and auto-pause new entries when sustained for 5s? (Advisory now; full kill-switch later.) 
+
+***<this one as well, I have no way to tell if that's a reasonable number to start - just keep the current number and see if it works>***
+
+Lock t_hedge = 1000 ms in the GUI as the default (editable control), with Slack alert on any timeout? 
+
+***<I think the slack alert should only include major red flags and buy and sell>***
+
+Confirm the fee rates we’ll display by default: NXT 0.0145%, KRX 0.015%, NXT 유관기관 ~0.0031833% (you can edit them in config).
+
+***<confirm>***
+
+Move on to next
+ChatGPT said:
+Thought for 40s
+
+Great—locking your choices. Here’s a clean, text-only GUI layout wireframe (V1) that matches everything we’ve specced so far (no code).
+
+Live during trading (default view)
+
+Top status bar
+
+Kiwoom: Connected / Logged-in (acct …) · Server (실서버/모의)
+
+Session: NXT FID-215 state + clock · Armed/Disarmed (overlap only)
+
+Orders/sec gauge with red band at ≥80%; auto-pause new entries if ≥80% for 5s
+
+Data-req/sec gauge (should stay near 0 during trading)
+
+Tokens free (orders bucket) incl. “2 reserved for cancel/hedge”
+
+Latency p95 tiles: Tick→Signal 25 ms, Signal→Send 15 ms, Send→Ack 150 ms (targets)
+
+Main body (two columns)
+
+Left: Active Symbols (very small list, e.g., 1–2)
+
+Row per symbol: SYM | edge(bps/KRW) | state (Idle/Candidate/Entry/Hedge/Flat) | unhedged ms | visible size KRX/NXT | last action
+
+Right: Pair Monitor
+
+Timeline for each in-flight pair: Entry take → Hedge post → (cancel?) → Hedge IOC → Flat
+
+Shows elapsed timers, order styles (Limit/IOC/Market/Mid 29), fills/rejects
+
+Bottom: Event Feed (live)
+
+Execution events in order (chejan-derived): BUY_FILL, SELL_FILL, PAIR_DONE, REJECT, CANCEL_SENT/ACK, AUTO-PAUSE ON/OFF
+
+Click any event → jump to the symbol in Pair Monitor
+
+Symbols view (watchlist of ~200)
+
+Table columns (read-only in V1):
+
+SYM | KRX bid/ask/size | NXT bid/ask/size | edge now (bps/KRW) | size OK? | eligible now? | cooldown (ms) | screen # | notes
+
+Per-row actions: Mute symbol (temporary), Unmute
+
+Config view (V1 controls)
+
+Edge buffer: ½–1 tick (default 1 tick net after fees)
+
+t_hedge: default 1000 ms (editable)
+
+Cooldown: default 100–200 ms (editable; set 0 to disable)
+
+Concurrency: max active symbols (default 1–2); outstanding slices per symbol (default 1)
+
+Fees (defaults): NXT 0.0145%, KRX 0.015%, NXT 유관기관 0.0031833% (editable)
+
+Session guard: shows overlap window (09:00:32–15:19:50); toggle “arm only inside overlap” (ON)
+
+Slack alerts (scope per your request):
+
+On: BUY_FILL, SELL_FILL, PAIR_DONE
+
+Major red flags only: AUTO-PAUSE ON, HEDGE TIMEOUT, REJECT SPIKE (e.g., ≥3 in 60s on one symbol)
+
+Off: info-level notices (session changes, routine cancels, etc.)
+
+Reports view (post-session)
+
+Session totals: #pairs, hit rate, avg edge (bps), fees (KRW), net PnL
+
+Per-symbol league: trades, net, avg unhedged time, reject/timeout rates
+
+Bottlenecks: time ≥80% orders/sec, average tokens free, top reject reasons
+
+Export: CSV/Excel summary
+
+Login/Launch strip (always visible until ready)
+
+Connect Kiwoom → shows CommConnect progress → Logged-in ✓ (acct chosen / PW saved)
+
+Register Feeds (disabled until session opens) → shows screen shards online
+
+Arm Trading (enforced by session guard)
+
+Slack (exact messages V1)
+
+BUY_FILL / SELL_FILL: BUY_FILL 005930@KRX qty 1 px 72,300 (pair X…)
+
+PAIR_DONE: PAIR_DONE 005930 net +0.7 bps (+₩…)
+
+AUTO-PAUSE ON (≥80% for 5s) / AUTO-PAUSE OFF
+
+HEDGE TIMEOUT: Timeout 1000 ms → cancel→IOC sent (…symbol…)
+
+REJECT SPIKE: 3 rejects/60s on … → symbol cooldown 200 ms
+
+Small print (behavior baked into the UI)
+
+Arming only when both markets are live; buttons disabled outside overlap.
+
+Orders bucket always preserves 2 tokens for cancel/hedge; new entries won’t start if that reserve would be violated.
+
+Event feed shows everything; Slack shows only fills + major red flags (your preference).
+
+Next up (unless you want to tweak the wireframe): I’ll outline the Config schema (V1) — the exact keys/sections for a single config.yaml (symbols, sessions, fees, thresholds, throttling), plus a tiny runbook for launch/arm/stop.
+
+You said:
+go ahead
+ChatGPT said:
+Thought for 27s
+
+Great—here’s a tight, no-code Config schema (V1) plus a tiny runbook so future-you can launch consistently. I kept it compact and implementation-agnostic.
+
+Config schema (V1) — what lives in config.yaml
+1) app
+
+mode: real | paper
+
+timezone: Asia/Seoul
+
+logging: level (INFO/DEBUG), file rotation (size & count)
+
+2) kiwoom
+
+server: 실서버 | 모의
+
+account: last-used account ID (read-only at runtime; set after login)
+
+screen_numbers:
+
+marketdata: list of 3–4 screen IDs for subscriptions
+
+orders: 1 screen ID for orders/cancels
+
+rate_limits:
+
+orders_per_sec: 5
+
+queries_per_sec: 5
+
+reserve_order_tokens: 2 (kept free for cancel/hedge)
+
+features:
+
+use_sor: false
+
+use_al_feed: false
+
+3) sessions
+
+arm_only_in_overlap: true
+
+overlap_window: start: "09:00:32", end: "15:19:50"
+
+nxt_main: start: "09:00:30", end: "15:20"
+
+use_fid_215_signals: true (P…V signals drive arm/disarm)
+
+4) symbols
+
+universe_file: path to CSV/XLSX list (KRX codes)
+
+per_symbol_overrides: (optional map)
+
+<code>:
+
+edge_buffer_ticks: override default (e.g., 1)
+
+max_outstanding_pairs: override (e.g., 1)
+
+t_hedge_ms: override (e.g., 800)
+
+5) market_data
+
+subscribe_top_of_book_only: true
+
+shards: 3 (how many screen shards to split ~200 names)
+
+heartbeat_symbols: [few codes] (tiny shard to watch session flips)
+
+6) spread_engine
+
+batch_interval_ms: 10
+
+edge_rule:
+
+min_net_ticks_after_fees: 1 (global default)
+
+also_require_min_visible_qty: 1
+
+cooldown_ms: 100 (set to 0 to disable)
+
+7) router
+
+entry_leg: prefer: ioc_or_market (take on rich side)
+
+hedge_leg:
+
+prefer: limit_or_mid
+
+allow_nxt_mid_price: true (호가 29, price 0)
+
+fallback_after_ms: t_hedge_ms (esc. to IOC/market)
+
+8) execution
+
+t_hedge_ms: 1000
+
+cancel_then_new_on_type_change: true
+
+max_concurrent_symbols: 1–2 (pilot)
+
+max_outstanding_pairs_per_symbol: 1
+
+9) throttling
+
+orders_bucket_per_sec: 5
+
+queries_bucket_per_sec: 5
+
+min_tokens_free_to_start_new_pair: 4 (2 for two legs + 2 reserved)
+
+10) fees
+
+krx:
+
+broker_bps: 1.5
+
+nxt:
+
+broker_bps: 1.45
+
+regulatory_bps: 0.31833
+
+(Edit these as needed; PnL uses this table)
+
+11) telemetry
+
+slo_targets_ms:
+
+tick_to_signal_p95: 25
+
+signal_to_send_p95: 15
+
+send_to_ack_p95: 150
+
+orders_utilization_autopause:
+
+threshold: 0.80
+
+sustain_seconds: 5
+
+enabled: true
+
+12) alerts
+
+slack:
+
+webhook: (env var reference)
+
+send_on:
+
+buy_fill: true
+
+sell_fill: true
+
+pair_done: true
+
+auto_pause_on: true
+
+hedge_timeout: true
+
+reject_spike: true
+
+Noise-level notices (session flips, routine cancels) = false by default.
+
+13) persistence
+
+logs_dir: path
+
+reports_dir: path
+
+exec_log_format: csv | parquet
+
+retention_days: 14
+
+Tiny runbook (V1)
+
+Before session
+
+Edit config.yaml (fees, overlap window, shards, SLOs) and set Slack webhook via env var.
+
+Prepare symbols file (KRX codes only; we map NXT internally).
+
+Launch app → Connect Kiwoom → complete login; store account PW via account window (first run only).
+
+Confirm status bar shows: Connected ✓, Account ✓, Server (실/모의).
+
+Arm for trading
+5) Wait for NXT main (+ your overlap start 09:00:32). Session bar should show Armed.
+6) Click Register Feeds → shards online; watch a couple of heartbeat symbols tick.
+7) Click Arm Trading. Orders bucket shows 2 tokens reserved.
+
+During session
+8) Watch Active Symbols (you’re running 1–2 concurrently in V1).
+9) If orders/sec ≥ 80% for 5s, auto-pause engages; you’ll see a red band and Slack “AUTO-PAUSE ON”. New entries stop; hedges/cancels still go through.
+10) Hedge not filled by t_hedge=1000 ms? System cancels → sends IOC/market; Slack “HEDGE TIMEOUT” fires.
+
+Disarm & shutdown
+11) At 15:19:50 (your guard end) or on disarm, engine stops accepting new pairs; existing ones flatten.
+12) Export Report (CSV/Excel) from Reports view.
+13) Disconnect Kiwoom; exit.
+
+If something’s off
+
+Many rejects on one symbol → the UI will auto-cooldown that name briefly; consider muting it.
+
+High Send→Ack latency (p95 > 150 ms) → reduce max_concurrent_symbols to 1; widen edge_buffer_ticks to 1 if it was ½.
+
+Notes on defaults
+
+NXT main window (≈ 09:00:30–15:20) and your overlap guard (09:00:32–15:19:50) drive arming/disarming, using FID-215 session signals plus wall-clock.
+
+Fee presets start with NXT 0.0145% broker, KRX 0.015%, and NXT 유관기관 ~0.0031833%; update if your broker table differs.
+
+Want me to sketch the state/transition table (one page, human-readable) next so it can drop into your spec, or move on to the data model (what we store per tick/pair/order for reports)?
+
+You said:
+I want you to update the flow diagram based on everything we have figure out thus far - don't use your canvas, just do the simple text version you did earlier 
+ChatGPT said:
+Thought for 1m 10s
+
+Awesome—here’s the updated, end-to-end text flow diagram that folds in everything we’ve decided so far.
+
+Launch → Login → Session arm → Data → Signal → Throttle → Route → Execute → Hedge/Close → Record/Alert → Disarm
+
+Boot & GUI
+• Start App (Windows, 32-bit; single-threaded Kiwoom calls). 
+
+README
+
+
+• Load config (symbols, fees, thresholds, timers).
+• Show “Connect” → call CommConnect(); wait for OnEventConnect=OK. 
+
+Kiwoom_Open_API_guidelines
+
+
+• Prompt account/인증 windows (Kiwoom native PW dialogs): ShowAccountWindow / SetInputValue etc., then continue.
+
+Session gating (arm/disarm the engine)
+• Subscribe minimal session/heartbeat + wall-clock.
+• Only ARM during true overlap: NXT 메인 09:00:30–15:20 AND KRX 09:00–15:20. (We start at 09:00:32; stop at 15:19:50 per your tweak.)
+→ If outside overlap, UI shows “Disarmed”; market data allowed, but signals/orders blocked.
+
+MarketData wiring (both venues, no AL)
+• Allocate screen numbers and register L1 feeds per venue (KRX & NXT) with SetRealReg. Max 100 symbols per screen; shard across 3–4 screens for ~200 names.
+• Enforce Kiwoom limits centrally: “조회” (data requests) ≤ 5/sec (separate counter from orders).
+• Maintain per-symbol snapshot: {KRX bid/ask/size, NXT bid/ask/size, last update time, fees/tick size}.
+
+SpreadEngine (simple, fast)
+• On tick, mark symbol “dirty”; every ~10 ms micro-burst, scan dirty list. (We can adjust later; no AL feed.)
+• Compute two candidates only:
+– Buy KRX ask vs Sell NXT bid;
+– Buy NXT ask vs Sell KRX bid.
+• Require: visible size ≥ planned slice, and edge ≥ fees(buy+sell)+buffer (global default “≥1 tick net after fees”; per-symbol override later).
+• Cooldown: after a flip from tradable→not-tradable, hold ~100–200 ms before reconsidering to avoid thrash (still keeping your “simple first” ethos).
+
+Throttler (global, centralized)
+• Three buckets, enforced before any send/cancel/query:
+– Orders ≤ 5/sec (hard Kiwoom cap). 
+
+Kiwoom_Open_API_guidelines
+
+
+– Data requests ≤ 5/sec (separate cap). 
+
+Kiwoom_Open_API_guidelines
+
+
+– Real-time regs: 100 symbols/screen (enforced at registration). 
+
+Kiwoom_Open_API_guidelines
+
+
+• Guardrail: auto-pause new entries if orders/sec ≥ 80% of cap sustained 5 s (advisory now). 
+
+Qusetion round 1_and my comment
+
+Router (deterministic venue choice; direct only)
+• Direct NXT routes: 21=매수, 22=매도. KRX uses normal SendOrder(). SOR (11/12/13/15) stays OFF by default. 
+
+Qusetion round 1_and my comment
+
+
+• Order style: take on the rich side (IOC/market) and post (limit or mid) on the cheap side to earn edge (subject to your 1 s hedge rule). 
+
+Qusetion round 1_and my comment
+
+
+• NXT 중간가: set 호가구분=29 with price=0 when we choose “mid” (your “use mid like any other quote” stance).
+
+ExecutionGateway (send / ack / fill correlation)
+• SendOrder; correlate success by 주문번호 returned on TR; track fills via Chejan stream.
+• Enforce “cancel-then-new” whenever changing order type (e.g., limit→market); Kiwoom forbids changing 거래구분 via 정정. 
+
+Kiwoom_Open_API_guidelines
+
+
+• Default pair sizing: micro-slices (pilot: 1×1 share; up to 10 outstanding per symbol later). 
+
+Qusetion round 1_and my comment
+
+Hedge escalation (t_hedge = 1000 ms default)
+• Place the “take” leg IOC/market on rich side; “post” leg on cheap side (limit or NXT mid).
+• If unhedged after t_hedge: cancel resting leg → send fresh IOC/market to flatten; freeze symbol briefly if needed (later). (Your Slack: only major red flags + fills.)
+
+Telemetry, PnL, and Alerts (lean set)
+• Latency SLOs for V1 dashboards (targets you accepted):
+– Tick→Signal p95 < 25 ms; Signal→OrderSend p95 < 15 ms; OrderSend→Ack p95 < 150 ms. 
+
+Qusetion round 1_and my comment
+
+
+• Reliability monitors (quiet in V1, view-only): rolling reject/timeout rates; orders/sec utilization with 80% band.
+• Alerts to Slack (minimal by your request): new fill (buy/sell), auto-pause trigger, hedge timeout, reject spikes.
+
+End-of-day Disarm
+• At 15:19:50, stop creating new entries; finish hedges; clean shutdown when NXT 메인 ends 15:20.
+
+If you want, I can also append a one-page “why” note for the cooldown + micro-burst ideas so future-you remembers the intent. For now, does this text diagram match what you had in mind?
+
+Sources
+You said:
+I wanted the one like earlier with boxes and arrows and with more detail we have figured out thus far
+ChatGPT said:
+Thought for 30s
+
+awesome—here’s the updated text-only flow diagram with boxes & arrows, now reflecting every decision we’ve locked in (overlap window, direct routing, micro-batching, cooldown, throttling, t_hedge, minimal Slack alerts, etc.). no code—just the end-to-end picture.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│           0) LAUNCH → LOGIN → ARM (must be in this exact order)              │
+└──────────────────────────────────────────────────────────────────────────────┘
+[Start App/GUI]
+     │
+     ▼
+[Load config.yaml]
+  - symbols (KRX codes), fees, edge buffer (≥1 tick net), t_hedge=1000ms
+  - throttle caps (orders 5/s, reserve 2 tokens), cooldown=100–200ms
+  - session guard: start 09:00:32, stop 15:19:50
+     │
+     ▼
+[Init Kiwoom control]
+     │
+     ▼
+[CommConnect()] ── opens Kiwoom Login Window ──▶ (User logs in)
+     │
+     ├── OnEventConnect == OK? ── No ──▶ [Show error + Retry/Exit]
+     │                                  ▲
+     │                                  └───────────────┘
+     ▼ Yes
+[Post-login setup]
+  - GetLoginInfo (account list)
+  - If needed, open Account-PW window once and save
+     │
+     ▼
+[Session bootstrap (disarmed)]
+  - Subscribe tiny heartbeat (FID-215) to watch NXT session flips
+  - Show status: Disarmed (not trading)
+     │
+     ▼
+[Overlap check passes? (KRX 09:00–15:20 AND NXT Main)]
+     │No
+     └── wait (heartbeat only)
+     │Yes
+     ▼
+[ARM TRADING]
+  - Guard window enforced: 09:00:32 → 15:19:50
+  - Enable feed registration controls
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│      1) FEEDS & STATE (per-venue L1 only; no AL; screen sharding)           │
+└──────────────────────────────────────────────────────────────────────────────┘
+[Register real-time L1 feeds]
+  - Shard ~200 symbols across 3–4 screen numbers (≤100/screen)
+  - For each symbol keep tiny snapshot (mutated in place):
+    {krx_bid, krx_ask, krx_sz, nxt_bid, nxt_ask, nxt_sz, t_krx, t_nxt}
+     │
+     ▼
+[MarketData hot path]
+  - On KRX/NXT tick: update snapshot; if best price changed → mark symbol DIRTY
+  - No per-tick allocations; integers only for price/size/timestamps
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│     2) MICRO-BATCH DECISION LOOP (SpreadEngine, every ~10 ms cadence)       │
+└──────────────────────────────────────────────────────────────────────────────┘
+[Every ~10 ms]
+     │
+     ▼
+[Take current DIRTY set]  (single pass; then clear)
+     │ for each DIRTY symbol that is not in cooldown:
+     ▼
+[Compute two candidates only]
+  A) Buy KRX ask  vs Sell NXT bid
+  B) Buy NXT ask  vs Sell KRX bid
+  - Require visible size ≥ intended slice (micro size)
+  - Edge ≥ fees(buy+sell) + buffer (default: ≥1 tick net after fees)
+     │
+     ├── Not eligible ──▶ [Arm COOLDOWN 100–200 ms] → (skip until expires)
+     │
+     └── Eligible ──────▶ [Emit SIGNAL(symbol, bestPair, qty=1, …)]
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│      3) ADMISSION & ROUTING (Risk → Throttler → Router; deterministic)      │
+└──────────────────────────────────────────────────────────────────────────────┘
+[SIGNAL]
+  │
+  ├── Risk checks
+  │   - Engine armed? inside guard window?        → must be TRUE
+  │   - Per-symbol outstanding slices < 1 (pilot) → must be TRUE
+  │   - Global active symbols ≤ 1–2 (pilot)       → must be TRUE
+  │
+  └── Throttler admission
+      - Orders bucket (5/s) has ≥4 free tokens?
+        (2 for both legs + keep 2 reserved for cancel/hedge)
+      - If Orders/sec ≥80% for ≥5s → AUTO-PAUSE new entries (advisory)
+      │
+      ├── No → [Queue or Drop SIGNAL] (log reason; optional cooldown)
+      └── Yes
+          ▼
+        [Router chooses order styles, direct venues only]
+          - “Rich side”  = TAKE immediately (IOC/Market, price=0)
+          - “Cheap side” = POST (Limit or NXT Mid, hoga=29, price=0)
+          - SOR OFF; AL feed unused
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 4) EXECUTION PIPE (ExecutionGateway; TR ack + Chejan lifecycle correlation) │
+└──────────────────────────────────────────────────────────────────────────────┘
+[ENTRY_TAKE_SENT]  (Leg A on rich venue, IOC/Market)
+  │
+  ├── TR response (주문번호)?
+  │     ├── No → [ENTRY_REJECTED] → cooldown → return to IDLE
+  │     └── Yes
+  │          ▼
+  │     Chejan events stream:
+  │       - 접수 → 체결(partial*) → 잔고 updates
+  │       - On full fill (or sufficient partial per slice)
+  │          ▼
+  │        [HEDGE_POST_SENT]  (Leg B on cheap venue, Limit or Mid)
+  │          │
+  │          ├── If fills before t_hedge=1000ms → [PAIRED_DONE → Flat]
+  │          │       - Log fills; compute fees/PnL; push GUI+Slack fills
+  │          │
+  │          └── Else at t_hedge deadline:
+  │                 [CANCEL_POST_SENT] → (ack) → [HEDGE_IOC_SENT]
+  │                   - send IOC/Market on cheap venue to flatten
+  │                   - Use reserved tokens; cancels count toward 5/s
+  │                        │
+  │                        └── On fill → [PAIRED_DONE → Flat]
+  │
+  └── *If ENTRY_TAKE only partially filled:
+           - For V1 micro-slices we treat fills as binary per tiny qty;
+             any remainder triggers same hedge procedure on filled qty
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│             5) TELEMETRY / PnL / ALERTS (minimal but sharp)                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+[Telemetry collectors]
+  - Latencies (p95): Tick→Signal(25ms), Signal→Send(15ms), Send→Ack(150ms)
+  - Reliability: reject/timeout rates; unhedged time; orders/sec utilization
+  - Resources: tokens free (orders bucket), auto-pause state
+  - Per-pair fees & net edge (bps & KRW) from configured fee table
+     │
+     ├── GUI updates (tiles, tables, pair timelines)
+     │
+     └── Slack (only major + fills, per your scope)
+         - BUY_FILL / SELL_FILL / PAIR_DONE
+         - AUTO-PAUSE ON/OFF
+         - HEDGE TIMEOUT (t_hedge exceeded → cancel→IOC fired)
+         - REJECT SPIKE (e.g., ≥3 in 60s on one symbol)
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                6) DISARM / SHUTDOWN (end of overlap window)                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+[15:19:50 guard end]
+   │
+   ├── Stop accepting new SIGNALs (engine disarms)
+   ├── Let in-flight pairs finish hedging/flatten
+   ├── Summarize session report (trades, fees, net PnL, KPIs)
+   └── Optionally unregister feeds → Disconnect Kiwoom → Exit
+
+
+──────────────────────────────────────────────────────────────────────────────
+
+tiny legend / reminders
+
+Micro-batch = fixed-cadence pass (~10 ms) over the DIRTY set, coalescing bursts.
+
+Cooldown = per-symbol short “don’t re-arm yet” after a just-miss/reject (100–200 ms).
+
+Reserve 2 tokens in orders bucket so cancel→IOC hedges are always possible.
+
+Direct routing only: KRX via normal SendOrder; NXT via NXT order types; SOR OFF.
+
+Mid on NXT: hoga=29, price=0; use ONLY on the passive/cheap leg.
+
+Guard window: ARM only 09:00:32–15:19:50 (within KRX day & NXT Main).
+
+want me to freeze this into a one-pager “flow spec” (just headings + the boxes above) so you can paste it into your planning doc as-is?
