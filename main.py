@@ -4,7 +4,7 @@
 main.py
 -------
 KRX-NXT Arbitrage Trading System - Main Entry Point
-
+-
 This is the main application launcher that initializes the GUI and core components
 according to the master architecture plan.
 
