@@ -64,8 +64,9 @@ class MarketDataManager(QObject):
     subscription_status = pyqtSignal(str, bool)  # screen_no, success
 
     # FID codes for real-time data
-    KRX_QUOTE_FIDS = "10;11;12;13;27;28"  # 현재가, 전일대비, 등락률, 누적거래량, 매도호가, 매수호가
-    NXT_QUOTE_FIDS = "10;11;12;13;27;28"  # Same FIDs for NXT
+    # 41: 매도호가1, 51: 매수호가1, 61: 매도호가수량1, 71: 매수호가수량1
+    KRX_QUOTE_FIDS = "41;51;61;71"
+    NXT_QUOTE_FIDS = "41;51;61;71"  # Same FIDs for NXT
 
     def __init__(self, kiwoom_connector: KiwoomConnector, config):
         super().__init__()
@@ -216,37 +217,61 @@ class MarketDataManager(QObject):
             real_data: Real data (not used directly)
         """
         try:
-            # Only process symbols we're tracking
-            if code not in self.quotes:
+            # Determine venue and base symbol
+            base_code = code[:-3] if code.endswith('_NX') else code
+            if base_code not in self.quotes:
                 return
 
-            # Get current quote snapshot
-            quote = self.quotes[code]
-            old_krx_bid = quote.krx_bid
-            old_krx_ask = quote.krx_ask
+            quote = self.quotes[base_code]
+            is_nxt = code.endswith('_NX')
 
-            # Extract real-time data using FIDs
-            current_price = self._parse_int(self.kiwoom.get_comm_real_data(code, 10))  # 현재가
-            bid_price = self._parse_int(self.kiwoom.get_comm_real_data(code, 27))  # 매수호가
-            ask_price = self._parse_int(self.kiwoom.get_comm_real_data(code, 28))  # 매도호가
-            volume = self._parse_int(self.kiwoom.get_comm_real_data(code, 13))  # 누적거래량
+            # Previous values for change detection
+            if is_nxt:
+                old_bid, old_ask = quote.nxt_bid, quote.nxt_ask
+                old_bid_size, old_ask_size = quote.nxt_bid_size, quote.nxt_ask_size
+            else:
+                old_bid, old_ask = quote.krx_bid, quote.krx_ask
+                old_bid_size, old_ask_size = quote.krx_bid_size, quote.krx_ask_size
 
-            # Update quote (assuming this is KRX data for now)
-            # TODO: Distinguish between KRX and NXT data based on real_type or code suffix
-            quote.krx_bid = bid_price if bid_price > 0 else quote.krx_bid
-            quote.krx_ask = ask_price if ask_price > 0 else quote.krx_ask
-            quote.krx_last_update = time.time()
+            # Extract real-time data using new FIDs
+            ask_price = self._parse_int(self.kiwoom.get_comm_real_data(code, 41))  # 매도호가1
+            bid_price = self._parse_int(self.kiwoom.get_comm_real_data(code, 51))  # 매수호가1
+            ask_size = self._parse_int(self.kiwoom.get_comm_real_data(code, 61))  # 매도호가수량1
+            bid_size = self._parse_int(self.kiwoom.get_comm_real_data(code, 71))  # 매수호가수량1
 
-            # Check if this is a meaningful change
-            if (quote.krx_bid != old_krx_bid or quote.krx_ask != old_krx_ask):
-                # Mark as dirty and add to dirty set
+            now = time.time()
+
+            if is_nxt:
+                quote.nxt_bid = bid_price if bid_price > 0 else quote.nxt_bid
+                quote.nxt_ask = ask_price if ask_price > 0 else quote.nxt_ask
+                quote.nxt_bid_size = bid_size if bid_size > 0 else quote.nxt_bid_size
+                quote.nxt_ask_size = ask_size if ask_size > 0 else quote.nxt_ask_size
+                quote.nxt_last_update = now
+                changed = (
+                        quote.nxt_bid != old_bid or quote.nxt_ask != old_ask or
+                        quote.nxt_bid_size != old_bid_size or quote.nxt_ask_size != old_ask_size
+                )
+                venue = "NXT"
+            else:
+                quote.krx_bid = bid_price if bid_price > 0 else quote.krx_bid
+                quote.krx_ask = ask_price if ask_price > 0 else quote.krx_ask
+                quote.krx_bid_size = bid_size if bid_size > 0 else quote.krx_bid_size
+                quote.krx_ask_size = ask_size if ask_size > 0 else quote.krx_ask_size
+                quote.krx_last_update = now
+                changed = (
+                        quote.krx_bid != old_bid or quote.krx_ask != old_ask or
+                        quote.krx_bid_size != old_bid_size or quote.krx_ask_size != old_ask_size
+                )
+                venue = "KRX"
+
+            if changed:
                 quote.is_dirty = True
-                self.dirty_symbols.add(code)
-
-                logger.debug(f"Quote updated: {code} KRX bid={quote.krx_bid} ask={quote.krx_ask}")
-
-                # Emit signal
-                self.quote_updated.emit(code, "KRX")
+                self.dirty_symbols.add(base_code)
+                logger.debug(
+                    f"Quote updated: {base_code} {venue} bid={bid_price} ask={ask_price} "
+                    f"bid_size={bid_size} ask_size={ask_size}"
+                )
+                self.quote_updated.emit(base_code, venue)
 
         except Exception as e:
             logger.error(f"Error processing real data for {code}: {e}")
