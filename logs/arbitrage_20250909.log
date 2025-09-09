@@ -1,4 +1,43 @@
-2025-09-09 13:02:27 | INFO     | root                 | Logging system initialized
-2025-09-09 13:02:27 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
-2025-09-09 13:02:27 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
-2025-09-09 13:02:28 | INFO     | __main__             | Application initialized successfully
+2025-09-09 15:12:19 | INFO     | root                 | Logging system initialized
+2025-09-09 15:12:19 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-09 15:12:19 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-09 15:12:19 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-09 15:12:19 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-09 15:12:19 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-09 15:12:19 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-09 15:12:19 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-09 15:12:19 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-09 15:12:19 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Screen 101: 100 symbols
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Screen 102: 100 symbols
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Screen 103: 100 symbols
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Screen 104: 98 symbols
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Loaded 398 symbols across 4 screen shards
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Subscribed screen 101 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Subscribed screen 102 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Subscribed screen 103 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Subscribed screen 104 with 98 symbols (98 KRX + 98 NXT)
+2025-09-09 15:12:19 | INFO     | src.core.market_data | Real-time subscriptions: 4/4 screens successful
+2025-09-09 15:36:25 | INFO     | root                 | Logging system initialized
+2025-09-09 15:36:25 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-09 15:36:25 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-09 15:36:25 | INFO     | src.core.session_state | Trading MANUALLY ARMED
+2025-09-09 15:36:25 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-09 15:36:25 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-09 15:36:25 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-09 15:36:25 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-09 15:36:25 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-09 15:36:25 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Screen 101: 100 symbols
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Screen 102: 100 symbols
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Screen 103: 100 symbols
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Screen 104: 98 symbols
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Loaded 398 symbols across 4 screen shards
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Subscribed screen 101 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Subscribed screen 102 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Subscribed screen 103 with 100 symbols (100 KRX + 100 NXT)
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Subscribed screen 104 with 98 symbols (98 KRX + 98 NXT)
+2025-09-09 15:36:25 | INFO     | src.core.market_data | Real-time subscriptions: 4/4 screens successful
+2025-09-09 15:36:25 | INFO     | src.core.spread_engine | SpreadEngine started
+2025-09-09 15:36:26 | INFO     | src.core.session_state | KRX trading hours changed: False
+2025-09-09 15:36:26 | INFO     | src.core.session_state | Trading state changed: TradingState.ARMED -> TradingState.CLOSING
