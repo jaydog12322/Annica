@@ -18,8 +18,18 @@ Key Features:
 import logging
 import time
 from typing import Dict, Any, Optional, Callable
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
-from PyQt5.QAxContainer import QAxWidget
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer, QEventLoop
+
+try:  # QAxContainer is only available on Windows
+    from PyQt5.QAxContainer import QAxWidget  # type: ignore
+except Exception:  # pragma: no cover - platform fallback
+    class QAxWidget(QObject):  # minimal stub for headless test environments
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+
+        def dynamicCall(self, *args, **kwargs):  # noqa: D401 - stub method
+            """Return 0 for all calls."""
+            return 0
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +93,47 @@ class KiwoomConnector(QObject):
         except Exception as e:
             logger.error(f"Failed to connect OCX events: {e}")
             raise
+
+    def login(self, show_account_pw: bool = False, timeout_ms: int = 10000) -> bool:
+        """Connect to Kiwoom and optionally prompt for account password.
+
+        This wraps the ``CommConnect`` sequence and waits synchronously for the
+        ``OnEventConnect`` callback before returning.  If ``show_account_pw`` is
+        ``True`` the Kiwoom account password window will be displayed once the
+        session is established so the user can save their password locally as
+        required by the OpenAPI guidelines.
+
+        Args:
+            show_account_pw: Whether to open the account-password window after
+                login so the user can store the password.
+            timeout_ms: Maximum time to wait for the ``OnEventConnect`` signal.
+
+        Returns:
+            ``True`` if login succeeded, ``False`` otherwise.
+        """
+
+        if self.is_connected:
+            return True
+
+        if not self.connect_to_server():
+            return False
+
+        loop = QEventLoop()
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(loop.quit)
+        self.connected.connect(loop.quit)
+        timer.start(timeout_ms)
+        loop.exec_()
+
+        if not self.is_connected:
+            logger.error("Kiwoom login failed or timed out")
+            return False
+
+        if show_account_pw:
+            self.show_account_window()
+
+        return True
 
     def connect_to_server(self) -> bool:
         """

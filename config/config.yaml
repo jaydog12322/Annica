@@ -44,6 +44,7 @@ kiwoom:
     - 104
     orders: 200
   server: 실서버
+  prompt_account_pw: false
 sessions:
   arm_only_in_overlap: true
   nxt_main:

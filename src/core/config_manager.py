@@ -45,6 +45,7 @@ class KiwoomConfig:
         "use_sor": False,
         "use_al_feed": False
     })
+    prompt_account_pw: bool = False
 
 
 @dataclass
@@ -241,7 +242,8 @@ class ConfigManager:
                 "account": config.kiwoom.account,
                 "screen_numbers": config.kiwoom.screen_numbers,
                 "rate_limits": config.kiwoom.rate_limits,
-                "features": config.kiwoom.features
+                "features": config.kiwoom.features,
+                "prompt_account_pw": config.kiwoom.prompt_account_pw
             },
             "sessions": {
                 "arm_only_in_overlap": config.sessions.arm_only_in_overlap,

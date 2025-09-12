@@ -6,3 +6,16 @@
 2025-09-12 15:06:58 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
 2025-09-12 15:06:58 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
 2025-09-12 15:06:59 | INFO     | __main__             | Application initialized successfully
+2025-09-12 15:07:37 | INFO     | root                 | Logging system initialized
+2025-09-12 15:07:37 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-12 15:07:37 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-12 15:07:38 | INFO     | __main__             | Application initialized successfully
+2025-09-12 15:25:39 | INFO     | root                 | Logging system initialized
+2025-09-12 15:25:39 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-12 15:25:39 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-12 15:25:39 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom OCX events connected
+2025-09-12 15:25:39 | INFO     | src.kiwoom.kiwoom_connector | KiwoomConnector initialized
+2025-09-12 15:25:39 | INFO     | src.kiwoom.kiwoom_connector | Initiating connection to Kiwoom server...
+2025-09-12 15:25:41 | INFO     | src.kiwoom.kiwoom_connector | CommConnect() called successfully - login window should appear
+2025-09-12 15:25:51 | ERROR    | src.kiwoom.kiwoom_connector | Kiwoom login failed or timed out
+2025-09-12 15:25:51 | ERROR    | __main__             | Unable to login to Kiwoom API

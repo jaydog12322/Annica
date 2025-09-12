@@ -25,6 +25,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from src.gui.main_window import MainWindow
 from src.core.config_manager import ConfigManager
 from src.utils.logger import setup_logging
+from src.kiwoom.kiwoom_connector import KiwoomConnector
 
 
 def main():
@@ -45,8 +46,17 @@ def main():
         app.setApplicationName("KRX-NXT Arbitrage System")
         app.setApplicationVersion("1.0.0")
 
+        # Initialize Kiwoom connection and login
+        kiwoom = KiwoomConnector()
+        if not kiwoom.login(show_account_pw=config.kiwoom.prompt_account_pw):
+            logger.error("Unable to login to Kiwoom API")
+            return 1
+
+        # Create and show main window (keep reference to kiwoom)
+
         # Create and show main window
         main_window = MainWindow(config)
+        main_window.kiwoom = kiwoom
         main_window.show()
 
         logger.info("Application initialized successfully")
