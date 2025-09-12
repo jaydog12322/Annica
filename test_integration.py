@@ -262,8 +262,8 @@ class IntegrationTest:
 
         # Fees config
         config.fees = FeesConfig(
-            krx={"broker_bps": 1.5},
-            nxt={"broker_bps": 1.45, "regulatory_bps": 0.31833}
+            nxt={"broker_bps": 1.45},
+            trade_tax_bps=20.0
         )
 
         # Telemetry config

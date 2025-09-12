@@ -26,7 +26,7 @@ fees:
     broker_bps: 1.5
   nxt:
     broker_bps: 1.45
-    regulatory_bps: 0.31833
+    regulatory_bps: 20.0
 kiwoom:
   account: ''
   features:

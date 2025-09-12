@@ -85,8 +85,10 @@ class SpreadEngine(QObject):
         self.cooldown_duration = self.spread_config.cooldown_ms / 1000.0  # Convert to seconds
 
         # Fee calculation
-        self.krx_fees_bps = config.fees.krx["broker_bps"]
-        self.nxt_fees_bps = config.fees.nxt["broker_bps"] + config.fees.nxt.get("regulatory_bps", 0)
+        self.krx_broker_bps = config.fees.krx["broker_bps"]
+        self.nxt_broker_bps = config.fees.nxt["broker_bps"]
+        # Trade tax applies to sells on any venue
+        self.trade_tax_bps = config.fees.trade_tax_bps
 
         # Edge threshold
         self.min_edge_ticks = self.spread_config.min_net_ticks_after_fees
@@ -251,8 +253,9 @@ class SpreadEngine(QObject):
         gross_edge_krw = sell_price - buy_price
 
         # Calculate fees
-        buy_fees_krw = (buy_price * self._get_venue_fees_bps(buy_venue)) / 10000
-        sell_fees_krw = (sell_price * self._get_venue_fees_bps(sell_venue)) / 10000
+        buy_fees_krw = (buy_price * self._get_brokerage_bps(buy_venue)) / 10000
+        sell_bps = self._get_brokerage_bps(sell_venue) + self.trade_tax_bps
+        sell_fees_krw = (sell_price * sell_bps) / 10000
         total_fees_krw = buy_fees_krw + sell_fees_krw
 
         # Net edge
@@ -278,12 +281,12 @@ class SpreadEngine(QObject):
             timestamp=time.time()
         )
 
-    def _get_venue_fees_bps(self, venue: str) -> float:
-        """Get fees in basis points for a venue"""
+    def _get_brokerage_bps(self, venue: str) -> float:
+        """Get brokerage fees in basis points for a venue"""
         if venue == "KRX":
-            return self.krx_fees_bps
+            return self.krx_broker_bps
         elif venue == "NXT":
-            return self.nxt_fees_bps
+            return self.nxt_broker_bps
         else:
             logger.warning(f"Unknown venue: {venue}")
             return 0.0

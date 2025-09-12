@@ -105,10 +105,9 @@ class ThrottlingConfig:
 class FeesConfig:
     """Fee configuration"""
     krx: Dict[str, float] = field(default_factory=lambda: {"broker_bps": 1.5})
-    nxt: Dict[str, float] = field(default_factory=lambda: {
-        "broker_bps": 1.45,
-        "regulatory_bps": 0.31833
-    })
+    nxt: Dict[str, float] = field(default_factory=lambda: {"broker_bps": 1.45})
+    # Trade tax applied on sell executions for any venue
+    trade_tax_bps: float = 20.0
 
 
 @dataclass
@@ -275,7 +274,8 @@ class ConfigManager:
             },
             "fees": {
                 "krx": config.fees.krx,
-                "nxt": config.fees.nxt
+                "nxt": config.fees.nxt,
+                "trade_tax_bps": config.fees.trade_tax_bps
             },
             "telemetry": {
                 "slo_targets_ms": config.telemetry.slo_targets_ms,
