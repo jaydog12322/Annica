@@ -56,7 +56,12 @@ class KiwoomConnector(QObject):
         super().__init__()
 
         # Initialize Kiwoom OCX control
-        self.ocx = QAxWidget("KHOPENAPI.KHOpenAPICtrl.1")
+        # On Windows the control must obtain a valid window handle prior to
+        # invoking ``CommConnect``.  Creating the widget first and then calling
+        # ``setControl`` ensures the underlying handle is established, avoiding
+        # the "핸들값이 없습니다" error described in the API guidelines.
+        self.ocx = QAxWidget()
+        self.ocx.setControl("KHOPENAPI.KHOpenAPICtrl.1")
 
         # Connection state
         self.is_connected = False

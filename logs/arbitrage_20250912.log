@@ -19,3 +19,16 @@
 2025-09-12 15:25:41 | INFO     | src.kiwoom.kiwoom_connector | CommConnect() called successfully - login window should appear
 2025-09-12 15:25:51 | ERROR    | src.kiwoom.kiwoom_connector | Kiwoom login failed or timed out
 2025-09-12 15:25:51 | ERROR    | __main__             | Unable to login to Kiwoom API
+2025-09-12 15:31:04 | INFO     | root                 | Logging system initialized
+2025-09-12 15:31:04 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-12 15:31:04 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-12 15:31:04 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom OCX events connected
+2025-09-12 15:31:04 | INFO     | src.kiwoom.kiwoom_connector | KiwoomConnector initialized
+2025-09-12 15:31:04 | INFO     | src.kiwoom.kiwoom_connector | Initiating connection to Kiwoom server...
+2025-09-12 15:31:07 | INFO     | src.kiwoom.kiwoom_connector | CommConnect() called successfully - login window should appear
+2025-09-12 15:31:16 | INFO     | src.kiwoom.kiwoom_connector | OnEventConnect received with error code: 0
+2025-09-12 15:31:16 | INFO     | src.kiwoom.kiwoom_connector | Successfully connected to Kiwoom server
+2025-09-12 15:31:16 | INFO     | src.kiwoom.kiwoom_connector | Login info - User: 최재현 (jac226)
+2025-09-12 15:31:16 | INFO     | src.kiwoom.kiwoom_connector | Available accounts: ['5133098311', '5590332010']
+2025-09-12 15:31:16 | INFO     | src.kiwoom.kiwoom_connector | Default account set to: 5133098311
+2025-09-12 15:31:17 | INFO     | __main__             | Application initialized successfully
