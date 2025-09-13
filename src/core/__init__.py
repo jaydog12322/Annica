@@ -1,2 +1,4 @@
 # -*- coding: utf-8 -*-
-from src.gui.main_window import MainWindow
+"""Core application modules."""
+
+__all__ = []

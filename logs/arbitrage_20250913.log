@@ -133,3 +133,44 @@
 2025-09-13 13:56:12 | ERROR    | src.core.market_data | Failed to subscribe screen 104: error None
 2025-09-13 13:56:12 | INFO     | src.core.market_data | Real-time subscriptions: 0/4 screens successful
 2025-09-13 13:56:12 | ERROR    | __main__             | Failed to start application: 'MainWindow' object has no attribute 'update_session_state'
+2025-09-13 14:27:23 | INFO     | root                 | Logging system initialized
+2025-09-13 14:27:23 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-13 14:27:23 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-13 14:27:23 | ERROR    | __main__             | Failed to start application: connect() failed between OnReceiveTrData(QString,QString,QString,QString,QString,int,QString,QString,QString) and tr_data_received()
+2025-09-13 14:34:25 | INFO     | root                 | Logging system initialized
+2025-09-13 14:34:25 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-13 14:34:25 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-13 14:34:25 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom control loaded
+2025-09-13 14:34:25 | INFO     | src.kiwoom.kiwoom_connector | Initiating Kiwoom login
+2025-09-13 14:34:35 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom login successful
+2025-09-13 14:34:35 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-13 14:34:35 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-13 14:34:35 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-13 14:34:35 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-13 14:34:35 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-13 14:34:35 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-13 14:34:35 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Screen 101: 200 symbols
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Screen 102: 200 symbols
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Screen 103: 200 symbols
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Screen 104: 112 symbols
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Loaded 712 symbols across 4 screen shards
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Subscribed screen 101 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Subscribed screen 102 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Subscribed screen 103 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Subscribed screen 104 with 112 symbols (112 KRX + 112 NXT)
+2025-09-13 14:34:36 | INFO     | src.core.market_data | Real-time subscriptions: 4/4 screens successful
+2025-09-13 14:34:36 | INFO     | src.core.spread_engine | SpreadEngine started
+2025-09-13 14:34:36 | INFO     | __main__             | Application initialized successfully
+2025-09-13 14:34:56 | INFO     | src.kiwoom.kiwoom_connector | Initiating Kiwoom login
+2025-09-13 14:35:08 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom login successful
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Screen 101: 200 symbols
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Screen 102: 200 symbols
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Screen 103: 200 symbols
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Screen 104: 112 symbols
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Loaded 712 symbols across 4 screen shards
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Subscribed screen 101 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Subscribed screen 102 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Subscribed screen 103 with 200 symbols (200 KRX + 200 NXT)
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Subscribed screen 104 with 112 symbols (112 KRX + 112 NXT)
+2025-09-13 14:35:22 | INFO     | src.core.market_data | Real-time subscriptions: 4/4 screens successful
