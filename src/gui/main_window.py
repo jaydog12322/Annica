@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
         self.throttler = None
         self.execution_gateway = None
         self.pair_manager = None
+        self.vi_lister = None
 
         self.setWindowTitle("KRX-NXT Arbitrage System")
         self.resize(1000, 700)
@@ -118,6 +119,8 @@ class MainWindow(QMainWindow):
         # Always show the account password window after login
         if self.kiwoom.login(show_account_pw=True):
             self.log_event("Kiwoom login successful")
+            if self.vi_lister:
+                self.vi_lister.start()
         else:
             self.log_event("Kiwoom login failed")
 

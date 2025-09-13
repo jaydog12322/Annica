@@ -34,7 +34,8 @@ class KiwoomConfig:
     account: str = ""  # Set after login
     screen_numbers: Dict[str, Any] = field(default_factory=lambda: {
         "marketdata": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115],
-        "orders": 200
+        "orders": 200,
+        "vi": 300,
     })
     rate_limits: Dict[str, int] = field(default_factory=lambda: {
         "orders_per_sec": 5,

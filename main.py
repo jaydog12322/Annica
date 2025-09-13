@@ -33,6 +33,7 @@ from src.core.router import Router
 from src.core.throttler import Throttler
 from src.kiwoom.execution_gateway import ExecutionGateway
 from src.core.pair_manager import PairManager
+from src.core.VI_Lister import VILister
 
 
 def main():
@@ -58,11 +59,12 @@ def main():
 
         # Initialize core components
         throttler = Throttler(config)
-        market_data = MarketDataManager(kiwoom, config)
+        vi_lister = VILister(kiwoom, config.kiwoom.screen_numbers.get("vi", 300))
+        market_data = MarketDataManager(kiwoom, config, vi_lister)
         session_state = SessionStateManager(config)
         spread_engine = SpreadEngine(market_data, session_state, config)
         router = Router(config)
-        execution_gateway = ExecutionGateway(kiwoom, throttler, config)
+        execution_gateway = ExecutionGateway(kiwoom, throttler, config, vi_lister)
         pair_manager = PairManager(router, throttler, execution_gateway, session_state, config)
 
         # Create and show main window (keep reference to kiwoom)
@@ -77,6 +79,7 @@ def main():
         main_window.throttler = throttler
         main_window.execution_gateway = execution_gateway
         main_window.pair_manager = pair_manager
+        main_window.vi_lister = vi_lister
         main_window.show()
 
         # Connect signals

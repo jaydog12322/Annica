@@ -54,6 +54,7 @@ kiwoom:
     - 114
     - 115
     orders: 200
+    vi: 300
   server: 실서버
   prompt_account_pw: true
 sessions:

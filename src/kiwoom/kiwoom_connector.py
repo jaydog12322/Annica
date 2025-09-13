@@ -132,3 +132,74 @@ class KiwoomConnector(QObject):
                 real_type,
             )
         )
+
+        # ------------------------------------------------------------------
+        # Real-time data helpers
+        # ------------------------------------------------------------------
+        def get_comm_real_data(self, code: str, fid: int) -> str:
+            """Wrapper for ``GetCommRealData``.
+
+            Returns an empty string when the underlying API is unavailable
+            (e.g. during unit tests on non-Windows platforms).
+            """
+            if self._api is None:
+                return ""
+            return str(self._api.dynamicCall("GetCommRealData(QString,int)", code, fid))
+
+        def unregister_real(self, screen_no: str, code: str) -> int:
+            """Unregister real-time data for *code* on *screen_no*.
+
+            Passing ``"ALL"`` as *code* removes all registrations on the screen.
+            """
+            if self._api is None:
+                return -1
+            return int(
+                self._api.dynamicCall("SetRealRemove(QString, QString)", screen_no, code)
+            )
+
+        # ------------------------------------------------------------------
+        # TR (transaction request) helpers
+        # ------------------------------------------------------------------
+        def set_input_value(self, name: str, value: str) -> None:
+            """Set input value prior to a TR request."""
+            if self._api is None:
+                return
+            self._api.dynamicCall("SetInputValue(QString, QString)", name, value)
+
+        def comm_rq_data(self, rq_name: str, tr_code: str, prev_next: int, screen_no: str) -> int:
+            """Send a TR request via ``CommRqData``."""
+            if self._api is None:
+                return -1
+            return int(
+                self._api.dynamicCall(
+                    "CommRqData(QString, QString, int, QString)",
+                    rq_name,
+                    tr_code,
+                    prev_next,
+                    screen_no,
+                )
+            )
+
+        def get_comm_data(self, tr_code: str, record_name: str, index: int, item_name: str) -> str:
+            """Retrieve data from the last TR response."""
+            if self._api is None:
+                return ""
+            return str(
+                self._api.dynamicCall(
+                    "GetCommData(QString, QString, int, QString)",
+                    tr_code,
+                    record_name,
+                    index,
+                    item_name,
+                )
+            )
+
+        def get_repeat_cnt(self, tr_code: str, record_name: str) -> int:
+            """Return the number of rows in the last TR response."""
+            if self._api is None:
+                return 0
+            return int(
+                self._api.dynamicCall(
+                    "GetRepeatCnt(QString, QString)", tr_code, record_name
+                )
+            )
