@@ -60,8 +60,8 @@ def main():
             logger.error("Unable to login to Kiwoom API")
             return 1
 
-        # Prompt for account password after login
-        kiwoom.prompt_account_password()
+        # Show Kiwoom account password window if configured
+        # (handled during login when prompt_account_pw is True)
 
         # Initialize core components
         throttler = Throttler(config)

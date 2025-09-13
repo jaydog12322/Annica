@@ -19,7 +19,7 @@ import logging
 import time
 from typing import Dict, Any, Optional, Callable
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer, QEventLoop
-from PyQt5.QtWidgets import QInputDialog, QLineEdit
+
 
 try:  # QAxContainer is only available on Windows
     from PyQt5.QAxContainer import QAxWidget  # type: ignore
@@ -99,7 +99,7 @@ class KiwoomConnector(QObject):
         self.account_list = []
         self.account = ""
         self.user_id = ""
-        self.account_pw = ""
+
 
         # Rate limiting
         self.last_tr_time = 0
@@ -132,12 +132,12 @@ class KiwoomConnector(QObject):
             raise
 
     def login(self, show_account_pw: bool = False, timeout_ms: int = 10000) -> bool:
-        """Connect to Kiwoom and optionally prompt for account password.
+        """Connect to Kiwoom and optionally display the account-password window.
 
         This wraps the ``CommConnect`` sequence and waits synchronously for the
         ``OnEventConnect`` callback before returning.  If ``show_account_pw`` is
-        ``True`` the Kiwoom account password window will be displayed once the
-        session is established so the user can save their password locally as
+        ``True`` the Kiwoom-provided account password window will be displayed
+        once the session is established so the user can store their password as
         required by the OpenAPI guidelines.
 
         Args:
@@ -254,21 +254,7 @@ class KiwoomConnector(QObject):
             logger.error(f"Failed to show account window: {e}")
             return False
 
-    def prompt_account_password(self) -> str:
-        """Prompt the user for their 4-digit account password."""
-        try:
-            pw, ok = QInputDialog.getText(
-                None,
-                "Account Password",
-                "Enter 4-digit account password:",
-                QLineEdit.Password,
-            )
-            if ok:
-                self.account_pw = pw
-            return self.account_pw
-        except Exception as e:
-            logger.error(f"Failed to get account password: {e}")
-            return ""
+
 
     def set_input_value(self, id: str, value: str):
         """Set input value for TR requests"""

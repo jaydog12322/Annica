@@ -56,3 +56,12 @@
 2025-09-13 13:27:22 | INFO     | src.core.market_data | Subscribed screen 104 with 112 symbols (112 KRX + 112 NXT)
 2025-09-13 13:27:22 | INFO     | src.core.market_data | Real-time subscriptions: 4/4 screens successful
 2025-09-13 13:27:22 | ERROR    | __main__             | Failed to start application: 'MainWindow' object has no attribute 'update_session_state'
+2025-09-13 13:36:12 | INFO     | root                 | Logging system initialized
+2025-09-13 13:36:12 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-13 13:36:12 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-13 13:36:13 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom OCX events connected
+2025-09-13 13:36:13 | INFO     | src.kiwoom.kiwoom_connector | KiwoomConnector initialized
+2025-09-13 13:36:13 | INFO     | src.kiwoom.kiwoom_connector | Initiating connection to Kiwoom server...
+2025-09-13 13:36:15 | INFO     | src.kiwoom.kiwoom_connector | CommConnect() called successfully - login window should appear
+2025-09-13 13:36:25 | ERROR    | src.kiwoom.kiwoom_connector | Kiwoom login failed or timed out
+2025-09-13 13:36:25 | ERROR    | __main__             | Unable to login to Kiwoom API
