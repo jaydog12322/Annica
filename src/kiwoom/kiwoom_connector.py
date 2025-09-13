@@ -63,6 +63,7 @@ class KiwoomConnector(QObject):
         self._api: Optional[QAxWidget] = None
         self._login_event_loop: Optional[QEventLoop] = None
         self._login_result: Optional[int] = None
+        self.logged_in: bool = False
 
         if QAxWidget is not None:
             # Instantiate the actual Kiwoom control
@@ -94,6 +95,7 @@ class KiwoomConnector(QObject):
         self._login_event_loop.exec_()
 
         success = self._login_result == 0
+        self.logged_in = success
         if success and show_account_pw:
             try:
                 self._api.dynamicCall("KOA_Functions(QString, QString)", "ShowAccountWindow", "")

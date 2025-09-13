@@ -14,14 +14,13 @@ Author: Arbitrage Team
 import sys
 import os
 import logging
-from pathlib import Path
-import pandas as pd
+
 
 # Add src to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QThread, pyqtSignal
+
 
 from src.gui.main_window import MainWindow
 from src.core.config_manager import ConfigManager
@@ -56,12 +55,6 @@ def main():
 
         # Initialize Kiwoom connection and login
         kiwoom = KiwoomConnector()
-        if not kiwoom.login(show_account_pw=config.kiwoom.prompt_account_pw):
-            logger.error("Unable to login to Kiwoom API")
-            return 1
-
-        # Show Kiwoom account password window if configured
-        # (handled during login when prompt_account_pw is True)
 
         # Initialize core components
         throttler = Throttler(config)
@@ -86,16 +79,6 @@ def main():
         main_window.pair_manager = pair_manager
         main_window.show()
 
-        # Load symbol universe and subscribe for quotes
-        try:
-            symbols_df = pd.read_excel(Path('data') / 'ticker_universe.xlsx')
-            symbols = symbols_df.iloc[:, 0].dropna().astype(str).tolist()
-        except Exception as e:
-            logger.error(f"Failed to load symbol universe: {e}")
-            symbols = []
-        market_data.load_symbol_universe(symbols)
-        market_data.subscribe_real_time_data()
-
         # Connect signals
         session_state.state_changed.connect(main_window.update_session_state)
         market_data.quote_updated.connect(main_window.update_quote)
@@ -108,9 +91,6 @@ def main():
         pair_manager.pair_state_changed.connect(
             lambda pid, state: main_window.log_event(f"Pair {pid} -> {state}")
         )
-
-        # Start processing loops
-        spread_engine.start()
 
         logger.info("Application initialized successfully")
 

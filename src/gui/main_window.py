@@ -115,7 +115,9 @@ class MainWindow(QMainWindow):
         if not self.kiwoom:
             self.log_event("Kiwoom connector not available")
             return
-        if self.kiwoom.login(show_account_pw=True):
+        if self.kiwoom.login(
+            show_account_pw=self.config.kiwoom.prompt_account_pw
+        ):
             self.log_event("Kiwoom login successful")
         else:
             self.log_event("Kiwoom login failed")
@@ -123,6 +125,9 @@ class MainWindow(QMainWindow):
     def _on_load_symbols(self) -> None:
         if not self.market_data:
             self.log_event("MarketDataManager not set")
+            return
+        if not self.kiwoom or not getattr(self.kiwoom, "logged_in", False):
+            self.log_event("Please log in before loading symbols")
             return
 
         path, _ = QFileDialog.getOpenFileName(
@@ -136,6 +141,8 @@ class MainWindow(QMainWindow):
             symbols: List[str] = df.iloc[:, 0].dropna().astype(str).tolist()
             self.market_data.load_symbol_universe(symbols)
             self.market_data.subscribe_real_time_data()
+            if self.spread_engine and not self.spread_engine.batch_timer.isActive():
+                self.spread_engine.start()
             self.log_event(f"Loaded {len(symbols)} symbols")
         except Exception as exc:  # pragma: no cover - dialog path issues
             self.log_event(f"Failed to load symbols: {exc}")
