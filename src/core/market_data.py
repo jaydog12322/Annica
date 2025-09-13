@@ -82,7 +82,7 @@ class MarketDataManager(QObject):
         # Screen allocation for sharding
         self.screen_shards: Dict[str, List[str]] = {}  # screen_no -> symbol list
         self.symbol_to_screen: Dict[str, str] = {}  # symbol -> screen_no
-        self.max_symbols_per_screen = 100
+        self.max_symbols_per_screen = 50
 
         # Subscription state
         self.active_subscriptions: Set[str] = set()  # screen numbers
