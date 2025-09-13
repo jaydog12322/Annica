@@ -24,12 +24,28 @@ from PyQt5.QtWidgets import QInputDialog, QLineEdit
 try:  # QAxContainer is only available on Windows
     from PyQt5.QAxContainer import QAxWidget  # type: ignore
 except Exception:  # pragma: no cover - platform fallback
+    class _DummySignal:
+        """Lightweight stand-in for pyqtSignal in headless tests."""
+
+        def connect(self, *args, **kwargs):  # noqa: D401 - stub connect
+            """Ignore all connections."""
+            return None
     class QAxWidget(QObject):  # minimal stub for headless test environments
         def __init__(self, *args, **kwargs):
             super().__init__()
+            # provide dummy event attributes so event wiring doesn't fail
+            self.OnEventConnect = _DummySignal()
+            self.OnReceiveTrData = _DummySignal()
+            self.OnReceiveRealData = _DummySignal()
+            self.OnReceiveChejanData = _DummySignal()
+            self.OnReceiveMsg = _DummySignal()
 
         def dynamicCall(self, *args, **kwargs):  # noqa: D401 - stub method
             """Return 0 for all calls."""
+            return 0
+
+        def winId(self):
+            """Return a fake window handle."""
             return 0
 
 logger = logging.getLogger(__name__)
@@ -57,12 +73,13 @@ class KiwoomConnector(QObject):
         super().__init__()
 
         # Initialize Kiwoom OCX control
-        # On Windows the control must obtain a valid window handle prior to
-        # invoking ``CommConnect``.  Creating the widget first and then calling
-        # ``setControl`` ensures the underlying handle is established, avoiding
-        # the "핸들값이 없습니다" error described in the API guidelines.
-        self.ocx = QAxWidget()
-        self.ocx.setControl("KHOPENAPI.KHOpenAPICtrl.1")
+        # The widget must obtain a native window handle before calling
+        # ``CommConnect`` or Kiwoom will terminate with
+        # "핸들값이 없습니다 프로그램을 종료합니다".  Constructing the control with
+        # the CLSID immediately loads the COM object and calling ``winId`` forces
+        # creation of the underlying HWND.
+        self.ocx = QAxWidget("KHOPENAPI.KHOpenAPICtrl.1")
+        self.ocx.winId()  # Ensure window handle is created eagerly
 
         # Connection state
         self.is_connected = False
