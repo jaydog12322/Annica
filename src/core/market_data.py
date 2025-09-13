@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 
 from src.kiwoom.kiwoom_connector import KiwoomConnector
+from src.core.VI_Lister import VILister
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +69,12 @@ class MarketDataManager(QObject):
     KRX_QUOTE_FIDS = "41;51;61;71"
     NXT_QUOTE_FIDS = "41;51;61;71"  # Same FIDs for NXT
 
-    def __init__(self, kiwoom_connector: KiwoomConnector, config):
+    def __init__(self, kiwoom_connector: KiwoomConnector, config, vi_lister: Optional[VILister] = None):
         super().__init__()
 
         self.kiwoom = kiwoom_connector
         self.config = config
+        self.vi_lister = vi_lister
 
         # Symbol universe and quote storage
         self.symbols: List[str] = []  # Will be loaded from config
@@ -222,6 +224,10 @@ class MarketDataManager(QObject):
             if base_code not in self.quotes:
                 return
 
+            # Skip processing if symbol is under a VI halt
+            if self.vi_lister and self.vi_lister.is_in_vi(base_code):
+                return
+
             quote = self.quotes[base_code]
             is_nxt = code.endswith('_NX')
 
@@ -352,6 +358,11 @@ class MarketDataManager(QObject):
         Returns:
             True if both KRX and NXT have recent data
         """
+
+        # Skip symbols currently in VI
+        if self.vi_lister and self.vi_lister.is_in_vi(symbol):
+            return False
+
         quote = self.quotes.get(symbol)
         if not quote:
             return False

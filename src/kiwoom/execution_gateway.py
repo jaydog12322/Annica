@@ -26,6 +26,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 from src.kiwoom.kiwoom_connector import KiwoomConnector
 from src.core.router import OrderIntent, Venue, OrderSide
 from src.core.throttler import Throttler, TokenType
+from src.core.VI_Lister import VILister
 
 logger = logging.getLogger(__name__)
 exec_logger = logging.getLogger('execution')
@@ -120,12 +121,13 @@ class ExecutionGateway(QObject):
     ORDER_TIME_FID = 908  # 주문/체결시간
     REJECT_REASON_FID = 919  # 거부사유
 
-    def __init__(self, kiwoom_connector: KiwoomConnector, throttler: Throttler, config):
+    def __init__(self, kiwoom_connector: KiwoomConnector, throttler: Throttler, config, vi_lister: Optional[VILister] = None):
         super().__init__()
 
         self.kiwoom = kiwoom_connector
         self.throttler = throttler
         self.config = config
+        self.vi_lister = vi_lister
 
         # Order tracking
         self.active_orders: Dict[str, OrderRecord] = {}  # client_order_id -> OrderRecord
@@ -158,6 +160,14 @@ class ExecutionGateway(QObject):
         try:
             # Generate client order ID
             client_order_id = self._generate_client_order_id(intent)
+
+            # Reject immediately if symbol is in a VI halt
+            if self.vi_lister and self.vi_lister.is_in_vi(intent.symbol):
+                self._emit_execution_event(
+                    "ORDER_REJECTED", intent.pair_id, intent.leg,
+                    client_order_id, {"reason": "symbol_in_vi"}
+                )
+                return client_order_id
 
             # Request tokens from throttler
             priority = 0 if intent.is_take_leg or intent.priority == 0 else 1

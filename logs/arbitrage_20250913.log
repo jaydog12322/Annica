@@ -234,3 +234,29 @@
 2025-09-13 15:02:44 | INFO     | src.core.market_data | Subscribed screen 108 with 12 symbols (12 KRX + 12 NXT)
 2025-09-13 15:02:44 | INFO     | src.core.market_data | Real-time subscriptions: 8/8 screens successful
 2025-09-13 15:02:44 | INFO     | src.core.spread_engine | SpreadEngine started
+2025-09-13 15:29:29 | INFO     | root                 | Logging system initialized
+2025-09-13 15:29:29 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-13 15:29:29 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-13 15:29:29 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom control loaded
+2025-09-13 15:29:29 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-13 15:29:29 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-13 15:29:29 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-13 15:29:29 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-13 15:29:29 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-13 15:29:29 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-13 15:29:29 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-13 15:29:30 | INFO     | __main__             | Application initialized successfully
+2025-09-13 15:29:30 | INFO     | src.core.session_state | KRX trading hours changed: False
+2025-09-13 15:37:54 | INFO     | root                 | Logging system initialized
+2025-09-13 15:37:54 | INFO     | __main__             | === KRX-NXT Arbitrage System Starting ===
+2025-09-13 15:37:54 | INFO     | src.core.config_manager | Loading configuration from config/config.yaml
+2025-09-13 15:37:55 | INFO     | src.kiwoom.kiwoom_connector | Kiwoom control loaded
+2025-09-13 15:37:55 | INFO     | src.core.throttler   | Throttler initialized: orders=5/s, queries=5/s, reserved=4, auto_pause=True
+2025-09-13 15:37:55 | INFO     | src.core.market_data | MarketDataManager initialized
+2025-09-13 15:37:55 | INFO     | src.core.session_state | SessionStateManager initialized
+2025-09-13 15:37:55 | INFO     | src.core.spread_engine | SpreadEngine initialized: batch_interval=10ms, cooldown=0.1s, min_edge=1 ticks
+2025-09-13 15:37:55 | INFO     | src.core.router      | Router initialized: entry=ioc_or_market, hedge=limit_or_mid, nxt_mid=True
+2025-09-13 15:37:55 | INFO     | src.kiwoom.execution_gateway | ExecutionGateway initialized
+2025-09-13 15:37:55 | INFO     | src.core.pair_manager | PairManager initialized: t_hedge=1000ms, max_concurrent=2, max_per_symbol=1
+2025-09-13 15:37:55 | INFO     | __main__             | Application initialized successfully
+2025-09-13 15:37:56 | INFO     | src.core.session_state | KRX trading hours changed: False
