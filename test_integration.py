@@ -199,7 +199,7 @@ class IntegrationTest:
             server="실서버",
             account="",
             screen_numbers={
-                "marketdata": [101, 102, 103, 104],
+                "marketdata": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115],
                 "orders": 200
             },
             rate_limits={

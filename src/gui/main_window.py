@@ -115,9 +115,8 @@ class MainWindow(QMainWindow):
         if not self.kiwoom:
             self.log_event("Kiwoom connector not available")
             return
-        if self.kiwoom.login(
-            show_account_pw=self.config.kiwoom.prompt_account_pw
-        ):
+        # Always show the account password window after login
+        if self.kiwoom.login(show_account_pw=True):
             self.log_event("Kiwoom login successful")
         else:
             self.log_event("Kiwoom login failed")

@@ -9,7 +9,7 @@ Implements screen sharding and maintains per-symbol snapshots according to the
 master plan specifications.
 
 Key Features:
-- Screen sharding (≤100 symbols per screen)
+- Screen sharding (≤50 symbols per screen ≈100 codes)
 - Per-venue L1 data (bid/ask/size)
 - Dirty flagging for changed quotes
 - No AL feed (per requirements)

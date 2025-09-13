@@ -33,7 +33,7 @@ class KiwoomConfig:
     server: str = "실서버"  # 실서버 | 모의
     account: str = ""  # Set after login
     screen_numbers: Dict[str, Any] = field(default_factory=lambda: {
-        "marketdata": [101, 102, 103, 104],
+        "marketdata": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115],
         "orders": 200
     })
     rate_limits: Dict[str, int] = field(default_factory=lambda: {
@@ -45,7 +45,7 @@ class KiwoomConfig:
         "use_sor": False,
         "use_al_feed": False
     })
-    prompt_account_pw: bool = False
+    prompt_account_pw: bool = True
 
 
 @dataclass
