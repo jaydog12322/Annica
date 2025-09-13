@@ -44,6 +44,16 @@ except Exception:  # pragma: no cover - platform fallback
             """Return 0 for all calls."""
             return 0
 
+        def setControl(self, *args, **kwargs):
+            """Stub for QAxWidget.setControl"""
+            return None
+
+        def setFixedSize(self, *args, **kwargs):  # pragma: no cover - GUI stub
+            return None
+
+        def show(self):  # pragma: no cover - GUI stub
+            return None
+
         def winId(self):
             """Return a fake window handle."""
             return 0
@@ -73,13 +83,16 @@ class KiwoomConnector(QObject):
         super().__init__()
 
         # Initialize Kiwoom OCX control
-        # The widget must obtain a native window handle before calling
-        # ``CommConnect`` or Kiwoom will terminate with
-        # "핸들값이 없습니다 프로그램을 종료합니다".  Constructing the control with
-        # the CLSID immediately loads the COM object and calling ``winId`` forces
-        # creation of the underlying HWND.
+        # According to the OpenAPI+ guideline the control must have a valid
+        # window handle *before* ``CommConnect`` is invoked or the OCX will
+        # terminate with "핸들값이 없습니다 프로그램을 종료합니다".  Simply instantiating
+        # the control does not guarantee a handle, so we create it off–screen,
+        # force a handle with ``winId()`` and keep it shown.
         self.ocx = QAxWidget("KHOPENAPI.KHOpenAPICtrl.1")
         self.ocx.winId()  # Ensure window handle is created eagerly
+        self.ocx.setFixedSize(0, 0)  # keep widget invisible but realized
+        self.ocx.show()
+        self.ocx.winId()  # Ensure native HWND exists
 
         # Connection state
         self.is_connected = False
