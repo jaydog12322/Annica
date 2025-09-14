@@ -265,7 +265,7 @@ class SpreadEngine(QObject):
         edge_bps = (net_edge_krw / buy_price) * 10000
 
         # Max quantity (limited by smaller side)
-        max_qty = min(buy_size, sell_size, 10)  # Cap at 10 for pilot
+        max_qty = min(buy_size, sell_size, 1)  # Further restrict to single share
 
         return ArbitrageSignal(
             symbol=symbol,
