@@ -233,6 +233,12 @@ class MainWindow(QMainWindow):
             self.symbol_table.setItem(row, 3, QTableWidgetItem(str(snapshot.nxt_bid)))
             self.symbol_table.setItem(row, 4, QTableWidgetItem(str(snapshot.nxt_ask)))
 
+    def _format_time(self, value: str) -> str:
+        """Format a ``HHMMSS`` string to ``HH:MM:SS`` for display."""
+        if len(value) == 6 and value.isdigit():
+            return f"{value[0:2]}:{value[2:4]}:{value[4:6]}"
+        return value
+
     def update_vi_status(self, symbol: str, in_vi: bool, info: dict | None = None) -> None:  # pragma: no cover - GUI only
         """Update the VI monitor table when a symbol's status changes."""
         row = self._find_vi_row(symbol)
@@ -243,8 +249,16 @@ class MainWindow(QMainWindow):
                 self.vi_table.setItem(row, 0, QTableWidgetItem(symbol))
                 if info:
                     self.vi_table.setItem(row, 1, QTableWidgetItem(info.get("name", "")))
-                    self.vi_table.setItem(row, 2, QTableWidgetItem(info.get("trigger_time", "")))
-                    self.vi_table.setItem(row, 3, QTableWidgetItem(info.get("release_time", "")))
+                    self.vi_table.setItem(
+                        row,
+                        2,
+                        QTableWidgetItem(self._format_time(info.get("trigger_time", ""))),
+                    )
+                    self.vi_table.setItem(
+                        row,
+                        3,
+                        QTableWidgetItem(self._format_time(info.get("release_time", ""))),
+                    )
                     self.vi_table.setItem(row, 4, QTableWidgetItem(info.get("trigger_type", "")))
                     self.vi_table.setItem(row, 5, QTableWidgetItem(info.get("trigger_price", "")))
         else:
