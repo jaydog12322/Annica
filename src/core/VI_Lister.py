@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 """vi_lister.py
 -----------------
-Real-time Volatility Interruption (VI) tracker.
+Real-time Volatility Interruption (VI) tracker – 4-column feed only.
 
-This module queries Kiwoom via the ``OPT10054`` TR to obtain the current list
-of symbols under a VI halt and registers for subsequent real-time
-``"VI발동/해제"`` events.  The class maintains an in-memory set of halted
-symbols and exposes a simple ``is_in_vi`` helper so other components can check
-status before processing orders or market data.
+Columns (GUI-bound):
+1) Ticker# (종목코드), 2) 종목이름, 3) Trigger Price, 4) 현재 VI 진입여부(True only emitted)
 
-The implementation gracefully degrades when the Kiwoom control is not
-available (e.g. during unit tests on non-Windows platforms).
+Behavior:
+- On start(): request OPT10054 once (snapshot) and auto-register VI real stream.
+- Emit rows to GUI only when in_vi == True (both on initial snapshot and on realtime updates).
 """
 
 from __future__ import annotations
@@ -28,48 +26,31 @@ logger = logging.getLogger(__name__)
 class VILister(QObject):
     """Maintain the set of symbols currently in a VI halt."""
 
-    # Emitted whenever a symbol's VI status changes (symbol, in_vi, info)
+    # Emitted only when a symbol is confirmed to be in VI (True).
+    # Signal payload: (symbol, in_vi, row_dict)
+    # row_dict keys: "Ticker#", "종목이름", "Trigger Price", "현재 VI 진입여부"
     vi_status_changed = pyqtSignal(str, bool, dict)
 
     RQ_NAME = "VI_LIST"
     TR_CODE = "OPT10054"
     REAL_TYPES = ("VI발동/해제", "주식VI발동/해제")
 
-    @staticmethod
-    def _get_item_any(conn, tr_code: str, rec_names, i: int, item_names):
-
-        """rec_names와 item_names를 순서대로 시도하여 처음으로 값을 주는 조합을 반환."""
-        if isinstance(rec_names, str):
-            rec_names = [rec_names]
-        if isinstance(item_names, str):
-            item_names = [item_names]
-        for rec in rec_names:
-            for item in item_names:
-                try:
-                    v = conn.get_comm_data(tr_code, rec, i, item).strip()
-                except Exception:
-                    v = ""
-                if v:
-                    return v
-        return ""
+    # Real-time FID map (subset needed for our 4 columns)
+    VI_FIDS = {
+        "name": 302,            # 종목명
+        "trigger_price": 1221,  # VI 발동가격
+        "trigger_type": 9068,   # VI발동구분 (1=발동, 2=해제 등)
+    }
 
     def __init__(self, kiwoom: KiwoomConnector, screen_no: str):
         super().__init__()
-
         self.kiwoom = kiwoom
         self.screen_no = str(screen_no)
-        self._vi_symbols: Set[str] = set()
-        # Map of symbol -> latest VI details
-        self._vi_info: Dict[str, Dict[str, str]] = {}
 
-        # FID mappings for real-time VI fields (per KOA documentation)
-        self.VI_FIDS = {
-            "trigger_time": 1223,  # 매매체결처리시각
-            "release_time": 1224,  # VI 해제시각
-            "trigger_type": 9068,  # VI발동구분
-            "trigger_price": 1221,  # VI 발동가격
-            "name": 302,  # 종목명
-        }
+        # Set of symbols currently in VI (for quick membership checks)
+        self._vi_symbols: Set[str] = set()
+        # Cache minimal info by code
+        self._vi_info: Dict[str, Dict[str, str]] = {}
 
         # Hook into Kiwoom callbacks
         self.kiwoom.tr_data_received.connect(self._on_tr_data)
@@ -79,23 +60,17 @@ class VILister(QObject):
     def start(self) -> None:
         """Request the initial VI list and register for real-time updates."""
         try:
+            # Custom wrapper in KiwoomConnector that calls CommRqData for OPT10054
             result = self.kiwoom.request_vi_list(self.screen_no, rq_name=self.RQ_NAME)
             if result != 0:
                 logger.error("VI list request failed: %s", result)
         except Exception:
             logger.exception("Failed to request VI list")
 
-        # [ADD] VI 실시간 FID 등록
+        # (Optional) Register a minimal FID set for redundancy/field fill
         try:
-            vi_fids = [
-                9001, 302, 13, 14, 9008, 9075,  # 코드/이름/누적
-                9068, 9069,  # 발동구분/방향
-                1221, 1223, 1224, 1225,  # 발동가/체결시각/해제시각/적용구분
-                1236, 1237, 1238, 1239,  # 기준가/괴리율(정/동)
-                1489, 1490, 1279
-            ]
-            fid_str = ";".join(map(str, vi_fids))
-            # 화면번호는 VI 전용으로, code_list="ALL", real_type="0"(덮어쓰기)
+            fid_str = ";".join(str(fid) for fid in self.VI_FIDS.values())
+            # Register on this screen; code_list "ALL" (broker allows) / real_type "0" overwrite
             self.kiwoom.set_real_reg(self.screen_no, "ALL", fid_str, "0")
             logger.info("Registered VI realtime FIDs on screen %s", self.screen_no)
         except Exception:
@@ -114,152 +89,121 @@ class VILister(QObject):
         msg: str,
         splm_msg: str,
     ) -> None:
-        """Handle TR data for the initial VI list."""
+        """Handle TR data for the initial VI list (snapshot)."""
         if rq_name != self.RQ_NAME:
             return
 
         try:
-            # Be tolerant to record/table naming differences
-            rec_primary = "발동종목"
-            rec_fallback = "output"
+            # TR 레코드명은 브로커 버전에 따라 다를 수 있어 넉넉히 시도
+            rec_candidates = ["발동종목", "output", "주식VI발동", "주식VI발동해제"]
 
-            cnt = self.kiwoom.get_repeat_cnt(tr_code, rec_primary)
-            if cnt == 0:
-                cnt = self.kiwoom.get_repeat_cnt(tr_code, rec_fallback)
+            def _get_repeat_cnt_any() -> int:
+                for rec in rec_candidates:
+                    try:
+                        c = self.kiwoom.get_repeat_cnt(tr_code, rec)
+                    except Exception:
+                        c = 0
+                    if c and c > 0:
+                        return c
+                return 0
+
+            def _get_item(tr: str, recs, i: int, item_names) -> str:
+                if isinstance(recs, str):
+                    recs = [recs]
+                if isinstance(item_names, str):
+                    item_names = [item_names]
+                for rec in recs:
+                    for item in item_names:
+                        try:
+                            v = (self.kiwoom.get_comm_data(tr, rec, i, item) or "").strip()
+                        except Exception:
+                            v = ""
+                        if v:
+                            return v
+                return ""
+
+            cnt = _get_repeat_cnt_any()
+            if cnt <= 0:
+                logger.info("No initial VI rows returned")
+                return
 
             new_set: Set[str] = set()
             for i in range(cnt):
-                code = self.kiwoom.get_comm_data(tr_code, rec_primary, i, "종목코드").strip()
+                code = _get_item(tr_code, rec_candidates, i, ["종목코드"])
                 if not code:
-                    code = self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "종목코드").strip()
-                if code:
-                    rec_candidates = ["발동종목", "output", "주식VI발동", "주식VI발동해제"]
+                    continue
 
-                    info = {
-                        # 시간 계열: 시/분/초계열 명칭이 제각각이라 넓게 커버
-                        "trigger_time": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
-                                                      ["발동시간", "발동시각", "체결시간", "체결시각"]),
-                        "release_time": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
-                                                      ["해제시간", "해지시간", "해제시각", "해지시각"]),
-                        # 구분(정적/동적/해제 등): 접두어가 빠지기도 함
-                        "trigger_type": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
-                                                      ["VI발동구분", "발동구분", "적용구분"]),
-                        # 가격 계열: 발동가/발동가격/기준가 등 혼용
-                        "trigger_price": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
-                                                       ["발동가격", "발동가", "기준가격", "기준가"]),
-                        "name": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
-                                              ["종목명", "한글종목명"]),
-                    }
+                name = _get_item(tr_code, rec_candidates, i, ["종목명", "한글종목명"])
+                trig_price = _get_item(tr_code, rec_candidates, i, ["발동가격", "발동가", "기준가격", "기준가"])
 
-                    def _fmt_hms_str(s: str) -> str:
-                        s = (s or "").strip()
-                        return f"{s[0:2]}:{s[2:4]}:{s[4:6]}" if len(s) >= 6 and s.isdigit() else s
+                # 스냅샷 단계에서는 모두 in_vi = True 로 간주(발동 목록이니까)
+                new_set.add(code)
+                self._vi_info[code] = {"name": name, "trigger_price": trig_price}
 
-                    info["trigger_time"] = _fmt_hms_str(info["trigger_time"])
-                    info["release_time"] = _fmt_hms_str(info["release_time"])
+                # === emit only True rows ===
+                row = {
+                    "Ticker#": code,
+                    "종목이름": name or "",
+                    "Trigger Price": trig_price or "",
+                    "현재 VI 진입여부": True,
+                }
+                self.vi_status_changed.emit(code, True, row)
 
-                    self._vi_info[code] = info
-                    new_set.add(code)
-
-            added = new_set - self._vi_symbols
-            removed = self._vi_symbols - new_set
+            # 내부 상태 갱신
             self._vi_symbols = new_set
+            logger.info("Loaded %d VI symbols (snapshot)", len(self._vi_symbols))
 
-            for sym in added:
-                self.vi_status_changed.emit(sym, True, self._vi_info.get(sym, {}).copy())
-            for sym in removed:
-                info = self._vi_info.pop(sym, {})
-                self.vi_status_changed.emit(sym, False, info)
-
-            logger.info("Loaded %d VI symbols", len(self._vi_symbols))
         except Exception:
             logger.exception("Error processing VI TR data")
 
     # ------------------------------------------------------------------
-    @staticmethod
-    def _fmt_hms(s: str) -> str:
-        s = (s or "").strip()
-        return f"{s[0:2]}:{s[2:4]}:{s[4:6]}" if len(s) >= 6 and s.isdigit() else s
-
-    def _dump_vi_fields(self, code: str):
-        probe = [9001, 302, 13, 14, 9008, 9075, 9068, 9069, 1221, 1223, 1224, 1225, 1236, 1237, 1238, 1239, 1489, 1490,
-                 1279]
-        got = {}
-        for fid in probe:
-            try:
-                v = (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
-            except Exception:
-                v = ""
-            if v:
-                got[fid] = v
-        logger.info("[VI DEBUG] %s %s", code, got)
-
     def _on_real_data(self, code: str, real_type: str, real_data: str) -> None:
-        if real_type not in getattr(self, "REAL_TYPES", (getattr(self, "REAL_TYPE", ""),)):
-            # 디버그: 실제 들어오는 이름을 기록해서 확인
-            logger.debug("[VI] Ignored real_type=%s code=%s", real_type, code)
+        """Handle real-time VI events: only emit when currently in VI."""
+        # Kiwoom sends VI events under these real types once OPT10054 was requested.
+        if real_type not in self.REAL_TYPES:
             return
 
-        # [ADD] --- DEBUG: 세 개 컬럼 값 찍기 ---
+        # 1) Determine in_vi by FID 9068 (fallback: keep last known state)
         try:
-            trig_time = (self.kiwoom.get_comm_real_data(code, 1223) or "").strip()
-            rel_time = (self.kiwoom.get_comm_real_data(code, 1224) or "").strip()
-            trig_type = (self.kiwoom.get_comm_real_data(code, 9068) or "").strip()
-        except Exception as e:
-            trig_time = rel_time = trig_type = f"[err {e}]"
-
-        logger.info("[VI DEBUG] code=%s TriggerTime=%s ReleaseTime=%s TriggerType=%s",
-                    code, trig_time, rel_time, trig_type)
-
-        # 1) FID 9068로 발동/해제 판정
-        try:
-            vi_flag = (self.kiwoom.get_comm_real_data(code, 9068) or "").strip()
+            vi_flag = (self.kiwoom.get_comm_real_data(code, self.VI_FIDS["trigger_type"]) or "").strip()
         except Exception:
             vi_flag = ""
-        in_vi = (vi_flag == "1")  # 1=발동, 2=해제 (브로커별 표현 다를 수 있어 보조룰 추가)
-        if vi_flag not in ("1", "2"):
-            # 보조룰: 해제시각(1224)이 채워지면 해제로 간주
+        in_vi = (vi_flag == "1")  # (common: 1=발동, 2=해제)
+
+        # 2) Cache minimal fields for our 4 columns
+        def _read_fid(fid: int) -> str:
             try:
-                rel_probe = (self.kiwoom.get_comm_real_data(code, 1224) or "").strip()
+                return (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
             except Exception:
-                rel_probe = ""
-            if rel_probe:
-                in_vi = False
+                return ""
 
-        # 2) 값 채우기 (키 이름 유지: trigger_time/release_time/trigger_type/trigger_price/name)
-        info = self._vi_info.setdefault(code, {})
-        for key, fid in self.VI_FIDS.items():
-            try:
-                value = (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
-            except Exception:
-                value = ""
-            if key in ("trigger_time", "release_time"):
-                value = self._fmt_hms(value)
+        name = _read_fid(self.VI_FIDS["name"]) or self._vi_info.get(code, {}).get("name", "")
+        trig_price = _read_fid(self.VI_FIDS["trigger_price"]) or self._vi_info.get(code, {}).get("trigger_price", "")
 
-            if value != "":
-                info[key] = value
+        # Update caches
+        if name:
+            self._vi_info.setdefault(code, {})["name"] = name
+        if trig_price:
+            self._vi_info.setdefault(code, {})["trigger_price"] = trig_price
 
-        # 3) 상태 업데이트 & 송출
+        # Maintain internal set
         if in_vi:
             self._vi_symbols.add(code)
         else:
             self._vi_symbols.discard(code)
 
-        # [임시] 실제 값 들어오는지 로그로 확인 (문제 해결되면 제거)
-        self._dump_vi_fields(code)
-
-        gui_row = {
-            "Code": code,
-            "Trigger Price": info.get("trigger_price", ""),
-            "Trigger Time": info.get("trigger_time", ""),
-            "Release Time": info.get("release_time", ""),
-            "Trigger Type": info.get("trigger_type", ""),
-            "Name": info.get("name", ""),
-        }
-        self.vi_status_changed.emit(code, in_vi, gui_row)
-
-        if not in_vi:
-            self._vi_info.pop(code, None)
+        # 3) Emit ONLY when in_vi is True (as requested)
+        if in_vi:
+            row = {
+                "Ticker#": code,
+                "종목이름": name or "",
+                "Trigger Price": trig_price or "",
+                "현재 VI 진입여부": True,
+            }
+            self.vi_status_changed.emit(code, True, row)
+        # else:
+        #   필요 시 False 이벤트도 GUI로 보내어 테이블에서 제거하도록 만들 수 있음:
+        #   self.vi_status_changed.emit(code, False, {"Ticker#": code, "종목이름": name, "Trigger Price": trig_price, "현재 VI 진입여부": False})
 
     # ------------------------------------------------------------------
     def is_in_vi(self, code: str) -> bool:

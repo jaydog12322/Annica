@@ -6,9 +6,9 @@ PyQt GUI for the KRX–NXT arbitrage engine.
 The window provides the operator controls specified in the blueprint:
 
 * **API Log-In & PW Set-up** – triggers Kiwoom login and optional
-  account‑password dialog.
+  account-password dialog.
 * **Load Symbols** – loads the trading universe from an Excel file and
-  subscribes to real‑time data.
+  subscribes to real-time data.
 * **System Log / Event Feed** – displays telemetry messages.
 * **Active Symbols** – table showing per-symbol quote information.
 * **Pair Monitor** – table placeholder for pair states.
@@ -114,17 +114,10 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.pair_table)
 
-        # -- VI monitor ------------------------------------------------------
-        self.vi_table = QTableWidget(0, 6)
+        # -- VI monitor (updated to 4 columns) -------------------------------
+        self.vi_table = QTableWidget(0, 4)
         self.vi_table.setHorizontalHeaderLabels(
-            [
-                "Symbol",
-                "Name",
-                "Trigger Time",
-                "Release Time",
-                "Trigger Type",
-                "Trigger Price",
-            ]
+            ["Ticker#", "종목이름", "Trigger Price", "현재 VI 진입여부"]
         )
         layout.addWidget(self.vi_table)
 
@@ -190,6 +183,17 @@ class MainWindow(QMainWindow):
             self.log_event("Please log in before starting VI Lister")
             return
         try:
+            # ensure signal is connected exactly once (UI expects True-rows only)
+            try:
+                self.vi_lister.vi_status_changed.disconnect(self.on_vi_status_changed)
+            except Exception:
+                pass
+            self.vi_lister.vi_status_changed.connect(self.on_vi_status_changed)
+
+            # optional: clear table on restart
+            # while self.vi_table.rowCount() > 0:
+            #     self.vi_table.removeRow(0)
+
             self.vi_lister.start()
             self.log_event("VI Lister started")
         except Exception as exc:  # pragma: no cover - GUI only
@@ -239,31 +243,51 @@ class MainWindow(QMainWindow):
             return f"{value[0:2]}:{value[2:4]}:{value[4:6]}"
         return value
 
-    def update_vi_status(self, symbol: str, in_vi: bool, info: dict | None = None) -> None:  # pragma: no cover - GUI only
-        """Update the VI monitor table when a symbol's status changes."""
-        row = self._find_vi_row(symbol)
-        if in_vi:
-            if row is None:
-                row = self.vi_table.rowCount()
-                self.vi_table.insertRow(row)
-                self.vi_table.setItem(row, 0, QTableWidgetItem(symbol))
-                if info:
-                    self.vi_table.setItem(row, 1, QTableWidgetItem(info.get("name", "")))
-                    self.vi_table.setItem(
-                        row,
-                        2,
-                        QTableWidgetItem(self._format_time(info.get("trigger_time", ""))),
-                    )
-                    self.vi_table.setItem(
-                        row,
-                        3,
-                        QTableWidgetItem(self._format_time(info.get("release_time", ""))),
-                    )
-                    self.vi_table.setItem(row, 4, QTableWidgetItem(info.get("trigger_type", "")))
-                    self.vi_table.setItem(row, 5, QTableWidgetItem(info.get("trigger_price", "")))
+    # === NEW: 4-column VI UI handler ==================================
+    def on_vi_status_changed(self, symbol: str, in_vi: bool, row: dict | None = None) -> None:  # pragma: no cover - GUI only
+        """Handle VILister.vi_status_changed; show only rows with in_vi=True.
+
+        Supports both the new 4-col payload keys and the older keys.
+        """
+        row = row or {}
+        ticker = row.get("Ticker#", row.get("Code", symbol))
+        name = row.get("종목이름", row.get("Name", ""))
+        trig_price = row.get("Trigger Price", row.get("trigger_price", ""))
+        in_flag = row.get("현재 VI 진입여부", in_vi)
+
+        # locate existing row (by column 0: Ticker#)
+        def _find_vi_row_by_ticker(t: str) -> int | None:
+            for r in range(self.vi_table.rowCount()):
+                it = self.vi_table.item(r, 0)
+                if it and it.text() == t:
+                    return r
+            return None
+
+        r = _find_vi_row_by_ticker(ticker)
+
+        if in_flag:
+            if r is None:
+                r = self.vi_table.rowCount()
+                self.vi_table.insertRow(r)
+                self.vi_table.setItem(r, 0, QTableWidgetItem(str(ticker)))
+            self.vi_table.setItem(r, 1, QTableWidgetItem(str(name)))
+            self.vi_table.setItem(r, 2, QTableWidgetItem(str(trig_price)))
+            self.vi_table.setItem(r, 3, QTableWidgetItem("True"))
         else:
-            if row is not None:
-                self.vi_table.removeRow(row)
+            if r is not None:
+                self.vi_table.removeRow(r)
+
+    # Backward-compat wrapper (kept for existing core calls)
+    def update_vi_status(self, symbol: str, in_vi: bool, info: dict | None = None) -> None:  # pragma: no cover - GUI only
+        """Backward-compatible entry point used by core modules."""
+        info = info or {}
+        payload = {
+            "Ticker#": info.get("Ticker#", info.get("Code", symbol)),
+            "종목이름": info.get("종목이름", info.get("Name", "")),
+            "Trigger Price": info.get("Trigger Price", info.get("trigger_price", "")),
+            "현재 VI 진입여부": in_vi if info.get("현재 VI 진입여부") is None else info.get("현재 VI 진입여부"),
+        }
+        self.on_vi_status_changed(symbol, in_vi, payload)
 
     # Pair monitor -----------------------------------------------------
     def _poll_pair_log(self) -> None:  # pragma: no cover - GUI only
