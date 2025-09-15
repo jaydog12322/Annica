@@ -145,6 +145,7 @@ class VILister(QObject):
             logger.exception("Error processing VI TR data")
 
     # ------------------------------------------------------------------
+    @staticmethod
     def _fmt_hms(s: str) -> str:
         s = (s or "").strip()
         return f"{s[0:2]}:{s[2:4]}:{s[4:6]}" if len(s) >= 6 and s.isdigit() else s
@@ -189,7 +190,8 @@ class VILister(QObject):
             except Exception:
                 value = ""
             if key in ("trigger_time", "release_time"):
-                value = _fmt_hms(value)
+                value = self._fmt_hms(value)
+
             if value != "":
                 info[key] = value
 
