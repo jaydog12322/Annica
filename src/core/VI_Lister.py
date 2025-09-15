@@ -33,7 +33,25 @@ class VILister(QObject):
 
     RQ_NAME = "VI_LIST"
     TR_CODE = "OPT10054"
-    REAL_TYPE = "VI발동/해제"
+    REAL_TYPES = ("VI발동/해제", "주식VI발동/해제")
+
+    @staticmethod
+    def _get_item_any(conn, tr_code: str, rec_names, i: int, item_names):
+
+        """rec_names와 item_names를 순서대로 시도하여 처음으로 값을 주는 조합을 반환."""
+        if isinstance(rec_names, str):
+            rec_names = [rec_names]
+        if isinstance(item_names, str):
+            item_names = [item_names]
+        for rec in rec_names:
+            for item in item_names:
+                try:
+                    v = conn.get_comm_data(tr_code, rec, i, item).strip()
+                except Exception:
+                    v = ""
+                if v:
+                    return v
+        return ""
 
     def __init__(self, kiwoom: KiwoomConnector, screen_no: str):
         super().__init__()
@@ -115,18 +133,31 @@ class VILister(QObject):
                 if not code:
                     code = self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "종목코드").strip()
                 if code:
+                    rec_candidates = ["발동종목", "output", "주식VI발동", "주식VI발동해제"]
+
                     info = {
-                        "trigger_time": self.kiwoom.get_comm_data(tr_code, rec_primary, i, "발동시간").strip()
-                                        or self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "발동시간").strip(),
-                        "release_time": self.kiwoom.get_comm_data(tr_code, rec_primary, i, "해제시간").strip()
-                                        or self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "해제시간").strip(),
-                        "trigger_type": self.kiwoom.get_comm_data(tr_code, rec_primary, i, "VI발동구분").strip()
-                                        or self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "VI발동구분").strip(),
-                        "trigger_price": self.kiwoom.get_comm_data(tr_code, rec_primary, i, "발동가격").strip()
-                                         or self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "발동가격").strip(),
-                        "name": self.kiwoom.get_comm_data(tr_code, rec_primary, i, "종목명").strip()
-                                or self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "종목명").strip(),
+                        # 시간 계열: 시/분/초계열 명칭이 제각각이라 넓게 커버
+                        "trigger_time": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
+                                                      ["발동시간", "발동시각", "체결시간", "체결시각"]),
+                        "release_time": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
+                                                      ["해제시간", "해지시간", "해제시각", "해지시각"]),
+                        # 구분(정적/동적/해제 등): 접두어가 빠지기도 함
+                        "trigger_type": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
+                                                      ["VI발동구분", "발동구분", "적용구분"]),
+                        # 가격 계열: 발동가/발동가격/기준가 등 혼용
+                        "trigger_price": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
+                                                       ["발동가격", "발동가", "기준가격", "기준가"]),
+                        "name": self._get_item_any(self.kiwoom, tr_code, rec_candidates, i,
+                                              ["종목명", "한글종목명"]),
                     }
+
+                    def _fmt_hms_str(s: str) -> str:
+                        s = (s or "").strip()
+                        return f"{s[0:2]}:{s[2:4]}:{s[4:6]}" if len(s) >= 6 and s.isdigit() else s
+
+                    info["trigger_time"] = _fmt_hms_str(info["trigger_time"])
+                    info["release_time"] = _fmt_hms_str(info["release_time"])
+
                     self._vi_info[code] = info
                     new_set.add(code)
 
@@ -164,8 +195,21 @@ class VILister(QObject):
         logger.info("[VI DEBUG] %s %s", code, got)
 
     def _on_real_data(self, code: str, real_type: str, real_data: str) -> None:
-        if real_type != self.REAL_TYPE:  # "VI발동/해제"
+        if real_type not in getattr(self, "REAL_TYPES", (getattr(self, "REAL_TYPE", ""),)):
+            # 디버그: 실제 들어오는 이름을 기록해서 확인
+            logger.debug("[VI] Ignored real_type=%s code=%s", real_type, code)
             return
+
+        # [ADD] --- DEBUG: 세 개 컬럼 값 찍기 ---
+        try:
+            trig_time = (self.kiwoom.get_comm_real_data(code, 1223) or "").strip()
+            rel_time = (self.kiwoom.get_comm_real_data(code, 1224) or "").strip()
+            trig_type = (self.kiwoom.get_comm_real_data(code, 9068) or "").strip()
+        except Exception as e:
+            trig_time = rel_time = trig_type = f"[err {e}]"
+
+        logger.info("[VI DEBUG] code=%s TriggerTime=%s ReleaseTime=%s TriggerType=%s",
+                    code, trig_time, rel_time, trig_type)
 
         # 1) FID 9068로 발동/해제 판정
         try:
