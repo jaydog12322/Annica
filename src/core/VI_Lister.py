@@ -61,12 +61,27 @@ class VILister(QObject):
     def start(self) -> None:
         """Request the initial VI list and register for real-time updates."""
         try:
-            # Use connector convenience to avoid -300 (missing/invalid inputs)
             result = self.kiwoom.request_vi_list(self.screen_no, rq_name=self.RQ_NAME)
             if result != 0:
                 logger.error("VI list request failed: %s", result)
         except Exception:
             logger.exception("Failed to request VI list")
+
+        # [ADD] VI 실시간 FID 등록
+        try:
+            vi_fids = [
+                9001, 302, 13, 14, 9008, 9075,  # 코드/이름/누적
+                9068, 9069,  # 발동구분/방향
+                1221, 1223, 1224, 1225,  # 발동가/체결시각/해제시각/적용구분
+                1236, 1237, 1238, 1239,  # 기준가/괴리율(정/동)
+                1489, 1490, 1279
+            ]
+            fid_str = ";".join(map(str, vi_fids))
+            # 화면번호는 VI 전용으로, code_list="ALL", real_type="0"(덮어쓰기)
+            self.kiwoom.set_real_reg(self.screen_no, "ALL", fid_str, "0")
+            logger.info("Registered VI realtime FIDs on screen %s", self.screen_no)
+        except Exception:
+            logger.exception("Failed to SetRealReg for VI")
 
     # ------------------------------------------------------------------
     def _on_tr_data(
@@ -130,32 +145,73 @@ class VILister(QObject):
             logger.exception("Error processing VI TR data")
 
     # ------------------------------------------------------------------
+    def _fmt_hms(s: str) -> str:
+        s = (s or "").strip()
+        return f"{s[0:2]}:{s[2:4]}:{s[4:6]}" if len(s) >= 6 and s.isdigit() else s
+
+    def _dump_vi_fields(self, code: str):
+        probe = [9001, 302, 13, 14, 9008, 9075, 9068, 9069, 1221, 1223, 1224, 1225, 1236, 1237, 1238, 1239, 1489, 1490,
+                 1279]
+        got = {}
+        for fid in probe:
+            try:
+                v = (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
+            except Exception:
+                v = ""
+            if v:
+                got[fid] = v
+        logger.info("[VI DEBUG] %s %s", code, got)
+
     def _on_real_data(self, code: str, real_type: str, real_data: str) -> None:
-        """Handle real-time VI events."""
-        if real_type != self.REAL_TYPE:
+        if real_type != self.REAL_TYPE:  # "VI발동/해제"
             return
 
-        event = real_data.strip()
-        in_vi = event == "1"  # 1=발동, other=해제
+        # 1) FID 9068로 발동/해제 판정
+        try:
+            vi_flag = (self.kiwoom.get_comm_real_data(code, 9068) or "").strip()
+        except Exception:
+            vi_flag = ""
+        in_vi = (vi_flag == "1")  # 1=발동, 2=해제 (브로커별 표현 다를 수 있어 보조룰 추가)
+        if vi_flag not in ("1", "2"):
+            # 보조룰: 해제시각(1224)이 채워지면 해제로 간주
+            try:
+                rel_probe = (self.kiwoom.get_comm_real_data(code, 1224) or "").strip()
+            except Exception:
+                rel_probe = ""
+            if rel_probe:
+                in_vi = False
 
+        # 2) 값 채우기 (키 이름 유지: trigger_time/release_time/trigger_type/trigger_price/name)
         info = self._vi_info.setdefault(code, {})
         for key, fid in self.VI_FIDS.items():
             try:
-                value = self.kiwoom.get_comm_real_data(code, fid).strip()
+                value = (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
             except Exception:
                 value = ""
-            if value:
+            if key in ("trigger_time", "release_time"):
+                value = _fmt_hms(value)
+            if value != "":
                 info[key] = value
 
+        # 3) 상태 업데이트 & 송출
         if in_vi:
-            if code not in self._vi_symbols:
-                self._vi_symbols.add(code)
-
+            self._vi_symbols.add(code)
         else:
-            if code in self._vi_symbols:
-                self._vi_symbols.discard(code)
-            # Once released remove stored info after notifying listeners
-        self.vi_status_changed.emit(code, in_vi, info.copy())
+            self._vi_symbols.discard(code)
+
+        # [임시] 실제 값 들어오는지 로그로 확인 (문제 해결되면 제거)
+        self._dump_vi_fields(code)
+
+        gui_row = {
+            "Code": code,
+            "Trigger Price": info.get("trigger_price", ""),
+            "Trigger Time": info.get("trigger_time", ""),
+            "Release Time": info.get("release_time", ""),
+            "Trigger Type": info.get("trigger_type", ""),
+            "Name": info.get("name", ""),
+        }
+        self.vi_status_changed.emit(code, in_vi, gui_row)
+
         if not in_vi:
             self._vi_info.pop(code, None)
 
