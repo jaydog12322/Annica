@@ -115,8 +115,17 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.pair_table)
 
         # -- VI monitor ------------------------------------------------------
-        self.vi_table = QTableWidget(0, 1)
-        self.vi_table.setHorizontalHeaderLabels(["VI Halted Symbols"])
+        self.vi_table = QTableWidget(0, 6)
+        self.vi_table.setHorizontalHeaderLabels(
+            [
+                "Symbol",
+                "Name",
+                "Trigger Time",
+                "Release Time",
+                "Trigger Type",
+                "Trigger Price",
+            ]
+        )
         layout.addWidget(self.vi_table)
 
         # Timer for polling execution log for pair update
@@ -224,7 +233,7 @@ class MainWindow(QMainWindow):
             self.symbol_table.setItem(row, 3, QTableWidgetItem(str(snapshot.nxt_bid)))
             self.symbol_table.setItem(row, 4, QTableWidgetItem(str(snapshot.nxt_ask)))
 
-    def update_vi_status(self, symbol: str, in_vi: bool) -> None:  # pragma: no cover - GUI only
+    def update_vi_status(self, symbol: str, in_vi: bool, info: dict | None = None) -> None:  # pragma: no cover - GUI only
         """Update the VI monitor table when a symbol's status changes."""
         row = self._find_vi_row(symbol)
         if in_vi:
@@ -232,6 +241,12 @@ class MainWindow(QMainWindow):
                 row = self.vi_table.rowCount()
                 self.vi_table.insertRow(row)
                 self.vi_table.setItem(row, 0, QTableWidgetItem(symbol))
+                if info:
+                    self.vi_table.setItem(row, 1, QTableWidgetItem(info.get("name", "")))
+                    self.vi_table.setItem(row, 2, QTableWidgetItem(info.get("trigger_time", "")))
+                    self.vi_table.setItem(row, 3, QTableWidgetItem(info.get("release_time", "")))
+                    self.vi_table.setItem(row, 4, QTableWidgetItem(info.get("trigger_type", "")))
+                    self.vi_table.setItem(row, 5, QTableWidgetItem(info.get("trigger_price", "")))
         else:
             if row is not None:
                 self.vi_table.removeRow(row)
