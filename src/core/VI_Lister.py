@@ -44,15 +44,13 @@ class VILister(QObject):
         # Map of symbol -> latest VI details
         self._vi_info: Dict[str, Dict[str, str]] = {}
 
-        # FID mappings for real-time VI fields
-        # NOTE: FID values are placeholders and should be verified against
-        # official Kiwoom documentation.
+        # FID mappings for real-time VI fields (per KOA documentation)
         self.VI_FIDS = {
-            "trigger_time": 214,
-            "release_time": 215,
-            "trigger_type": 216,
-            "trigger_price": 217,
-            "name": 302,
+            "trigger_time": 1223,  # 매매체결처리시각
+            "release_time": 1224,  # VI 해제시각
+            "trigger_type": 9068,  # VI발동구분
+            "trigger_price": 1221,  # VI 발동가격
+            "name": 302,  # 종목명
         }
 
         # Hook into Kiwoom callbacks
