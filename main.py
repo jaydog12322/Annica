@@ -83,8 +83,7 @@ def main():
         main_window.show()
 
         # Connect signals
-        session_state.state_changed.connect(main_window.update_session_state)
-        market_data.quote_updated.connect(main_window.update_quote)
+        vi_lister.vi_status_changed.connect(main_window.update_vi_status)
         spread_engine.signal_generated.connect(pair_manager.handle_signal)
         spread_engine.batch_processed.connect(
             lambda stats: main_window.log_event(

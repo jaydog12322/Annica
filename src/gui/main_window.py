@@ -26,7 +26,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-import pandas as pd
+try:  # pragma: no cover - optional dependency for Excel loading
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - pandas may not be installed in test env
+    pd = None
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -107,6 +110,11 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.pair_table)
 
+        # -- VI monitor ------------------------------------------------------
+        self.vi_table = QTableWidget(0, 1)
+        self.vi_table.setHorizontalHeaderLabels(["VI Halted Symbols"])
+        layout.addWidget(self.vi_table)
+
         # Timer for polling execution log for pair update
         self._pair_log_path = Path("logs") / f"execution_{datetime.now():%Y%m%d}.log"
         self._pair_log_pos = 0
@@ -149,6 +157,8 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            if pd is None:
+                raise RuntimeError("pandas not installed")
             df = pd.read_excel(path)
             symbols: List[str] = df.iloc[:, 0].dropna().astype(str).tolist()
             self.market_data.load_symbol_universe(symbols)
@@ -196,6 +206,18 @@ class MainWindow(QMainWindow):
         else:
             self.symbol_table.setItem(row, 3, QTableWidgetItem(str(snapshot.nxt_bid)))
             self.symbol_table.setItem(row, 4, QTableWidgetItem(str(snapshot.nxt_ask)))
+
+    def update_vi_status(self, symbol: str, in_vi: bool) -> None:  # pragma: no cover - GUI only
+        """Update the VI monitor table when a symbol's status changes."""
+        row = self._find_vi_row(symbol)
+        if in_vi:
+            if row is None:
+                row = self.vi_table.rowCount()
+                self.vi_table.insertRow(row)
+                self.vi_table.setItem(row, 0, QTableWidgetItem(symbol))
+        else:
+            if row is not None:
+                self.vi_table.removeRow(row)
 
     # Pair monitor -----------------------------------------------------
     def _poll_pair_log(self) -> None:  # pragma: no cover - GUI only
@@ -251,4 +273,11 @@ class MainWindow(QMainWindow):
             if item and item.text() == pair_id:
                 return row
 
+        return None
+
+    def _find_vi_row(self, symbol: str) -> int | None:
+        for row in range(self.vi_table.rowCount()):
+            item = self.vi_table.item(row, 0)
+            if item and item.text() == symbol:
+                return row
         return None
