@@ -50,10 +50,8 @@ class VILister(QObject):
     def start(self) -> None:
         """Request the initial VI list and register for real-time updates."""
         try:
-            # ``OPT10054`` takes no input parameters; simply issue the request.
-            result = self.kiwoom.comm_rq_data(
-                self.RQ_NAME, self.TR_CODE, 0, self.screen_no
-            )
+            # Use connector convenience to avoid -300 (missing/invalid inputs)
+            result = self.kiwoom.request_vi_list(self.screen_no, rq_name=self.RQ_NAME)
             if result != 0:
                 logger.error("VI list request failed: %s", result)
         except Exception:
@@ -77,13 +75,19 @@ class VILister(QObject):
             return
 
         try:
-            cnt = self.kiwoom.get_repeat_cnt(tr_code, "output")
+            # Be tolerant to record/table naming differences
+            rec_primary = "발동종목"
+            rec_fallback = "output"
+
+            cnt = self.kiwoom.get_repeat_cnt(tr_code, rec_primary)
+            if cnt == 0:
+                cnt = self.kiwoom.get_repeat_cnt(tr_code, rec_fallback)
+
             new_set: Set[str] = set()
             for i in range(cnt):
-                code = (
-                    self.kiwoom.get_comm_data(tr_code, "output", i, "종목코드")
-                    .strip()
-                )
+                code = self.kiwoom.get_comm_data(tr_code, rec_primary, i, "종목코드").strip()
+                if not code:
+                    code = self.kiwoom.get_comm_data(tr_code, rec_fallback, i, "종목코드").strip()
                 if code:
                     new_set.add(code)
 
@@ -119,9 +123,6 @@ class VILister(QObject):
                 self.vi_status_changed.emit(code, False)
 
     # ------------------------------------------------------------------
-    def is_in_vi(self, symbol: str) -> bool:
-        """Return ``True`` if *symbol* is currently in a VI halt."""
-        return symbol in self._vi_symbols
-
-
-__all__ = ["VILister"]
+    def is_in_vi(self, code: str) -> bool:
+        """Return True if *code* is currently in a VI halt."""
+        return code in self._vi_symbols

@@ -87,6 +87,10 @@ class MainWindow(QMainWindow):
         self.load_btn.clicked.connect(self._on_load_symbols)
         btn_row.addWidget(self.load_btn)
 
+        self.vi_btn = QPushButton("Start VI Lister")
+        self.vi_btn.clicked.connect(self._on_start_vi_lister)
+        btn_row.addWidget(self.vi_btn)
+
         layout.addLayout(btn_row)
 
         # -- Status labels ---------------------------------------------------
@@ -137,8 +141,7 @@ class MainWindow(QMainWindow):
         # Always show the account password window after login
         if self.kiwoom.login(show_account_pw=True):
             self.log_event("Kiwoom login successful")
-            if self.vi_lister:
-                self.vi_lister.start()
+
         else:
             self.log_event("Kiwoom login failed")
 
@@ -169,6 +172,20 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # pragma: no cover - dialog path issues
             self.log_event(f"Failed to load symbols: {exc}")
             logger.exception("Failed to load symbols")
+
+    def _on_start_vi_lister(self) -> None:
+        if not self.vi_lister:
+            self.log_event("VI Lister not set")
+            return
+        if not self.kiwoom or not getattr(self.kiwoom, "logged_in", False):
+            self.log_event("Please log in before starting VI Lister")
+            return
+        try:
+            self.vi_lister.start()
+            self.log_event("VI Lister started")
+        except Exception as exc:  # pragma: no cover - GUI only
+            self.log_event(f"Failed to start VI Lister: {exc}")
+            logger.exception("Failed to start VI Lister")
 
     # ------------------------------------------------------------------
     # Methods called from core modules
