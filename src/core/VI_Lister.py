@@ -164,11 +164,15 @@ class VILister(QObject):
             return
 
         # 1) Determine in_vi by FID 9068 (fallback: keep last known state)
+        prev_in_vi = code in self._vi_symbols
         try:
             vi_flag = (self.kiwoom.get_comm_real_data(code, self.VI_FIDS["trigger_type"]) or "").strip()
         except Exception:
             vi_flag = ""
-        in_vi = (vi_flag == "1")  # (common: 1=발동, 2=해제)
+        if vi_flag:
+            in_vi = (vi_flag == "1")  # (common: 1=발동, 2=해제)
+        else:
+            in_vi = prev_in_vi  # Broker sometimes omits field on partial packets
 
         # 2) Cache minimal fields for our 4 columns
         def _read_fid(fid: int) -> str:
@@ -192,18 +196,27 @@ class VILister(QObject):
         else:
             self._vi_symbols.discard(code)
 
-        # 3) Emit ONLY when in_vi is True (as requested)
+        # 3) Emit when entering VI or when leaving so GUI can clear the row
+        should_emit = False
+        emit_flag = in_vi
         if in_vi:
+            should_emit = True
+        elif prev_in_vi and not in_vi:
+            should_emit = True
+            emit_flag = False
+
+        elif vi_flag == "2":  # explicit 해제 flag even if we missed the entry
+            should_emit = True
+            emit_flag = False
+
+        if should_emit:
             row = {
                 "Ticker#": code,
                 "종목이름": name or "",
                 "Trigger Price": trig_price or "",
-                "현재 VI 진입여부": True,
+                "현재 VI 진입여부": emit_flag,
             }
-            self.vi_status_changed.emit(code, True, row)
-        # else:
-        #   필요 시 False 이벤트도 GUI로 보내어 테이블에서 제거하도록 만들 수 있음:
-        #   self.vi_status_changed.emit(code, False, {"Ticker#": code, "종목이름": name, "Trigger Price": trig_price, "현재 VI 진입여부": False})
+            self.vi_status_changed.emit(code, emit_flag, row)
 
     # ------------------------------------------------------------------
     def is_in_vi(self, code: str) -> bool:
