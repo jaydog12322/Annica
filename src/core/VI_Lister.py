@@ -4,11 +4,11 @@
 Real-time Volatility Interruption (VI) tracker – 4-column feed only.
 
 Columns (GUI-bound):
-1) Ticker# (종목코드), 2) 종목이름, 3) Trigger Price, 4) 현재 VI 진입여부(True only emitted)
+1) Ticker# (종목코드), 2) 종목이름, 3) Trigger Price, 4) 현재 VI 진입여부
 
 Behavior:
 - On start(): request OPT10054 once (snapshot) and auto-register VI real stream.
-- Emit rows to GUI only when in_vi == True (both on initial snapshot and on realtime updates).
+- Emit rows to GUI when in_vi == True (enter) and emit a False row on 해제 so GUI can remove.
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 class VILister(QObject):
     """Maintain the set of symbols currently in a VI halt."""
 
-    # Emitted only when a symbol is confirmed to be in VI (True).
     # Signal payload: (symbol, in_vi, row_dict)
     # row_dict keys: "Ticker#", "종목이름", "Trigger Price", "현재 VI 진입여부"
     vi_status_changed = pyqtSignal(str, bool, dict)
@@ -39,7 +38,7 @@ class VILister(QObject):
     VI_FIDS = {
         "name": 302,            # 종목명
         "trigger_price": 1221,  # VI 발동가격
-        "trigger_type": 9068,   # VI발동구분 (1=발동, 2=해제 등)
+        "trigger_type": 9068,   # VI발동구분 (1=발동, 2=해제)
     }
 
     def __init__(self, kiwoom: KiwoomConnector, screen_no: str):
@@ -57,6 +56,12 @@ class VILister(QObject):
         self.kiwoom.real_data_received.connect(self._on_real_data)
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _norm_code(code: str) -> str:
+        """Normalize codes: strip leading 'A' and zero-pad to 6 digits."""
+        return (code or "").lstrip("A").zfill(6)
+
+    # ------------------------------------------------------------------
     def start(self) -> None:
         """Request the initial VI list and register for real-time updates."""
         try:
@@ -67,10 +72,10 @@ class VILister(QObject):
         except Exception:
             logger.exception("Failed to request VI list")
 
-        # (Optional) Register a minimal FID set for redundancy/field fill
+        # Register minimal FIDs for realtime VI events
         try:
             fid_str = ";".join(str(fid) for fid in self.VI_FIDS.values())
-            # Register on this screen; code_list "ALL" (broker allows) / real_type "0" overwrite
+            # Register on this screen; code_list "ALL" / real_type "0" overwrite
             self.kiwoom.set_real_reg(self.screen_no, "ALL", fid_str, "0")
             logger.info("Registered VI realtime FIDs on screen %s", self.screen_no)
         except Exception:
@@ -132,15 +137,16 @@ class VILister(QObject):
                 code = _get_item(tr_code, rec_candidates, i, ["종목코드"])
                 if not code:
                     continue
+                code = self._norm_code(code)  # normalize snapshot codes
 
                 name = _get_item(tr_code, rec_candidates, i, ["종목명", "한글종목명"])
                 trig_price = _get_item(tr_code, rec_candidates, i, ["발동가격", "발동가", "기준가격", "기준가"])
 
                 # 스냅샷 단계에서는 모두 in_vi = True 로 간주(발동 목록이니까)
                 new_set.add(code)
-                self._vi_info[code] = {"name": name, "trigger_price": trig_price}
+                self._vi_info[code] = {"name": name or "", "trigger_price": trig_price or ""}
 
-                # === emit only True rows ===
+                # === emit True row ===
                 row = {
                     "Ticker#": code,
                     "종목이름": name or "",
@@ -158,23 +164,29 @@ class VILister(QObject):
 
     # ------------------------------------------------------------------
     def _on_real_data(self, code: str, real_type: str, real_data: str) -> None:
-        """Handle real-time VI events: only emit when currently in VI."""
+        """Handle real-time VI events: emit True on enter, False on release."""
         # Kiwoom sends VI events under these real types once OPT10054 was requested.
         if real_type not in self.REAL_TYPES:
             return
 
+        # Normalize incoming code first (often '######' without 'A')
+        code = self._norm_code(code)
+
         # 1) Determine in_vi by FID 9068 (fallback: keep last known state)
-        prev_in_vi = code in self._vi_symbols
         try:
             vi_flag = (self.kiwoom.get_comm_real_data(code, self.VI_FIDS["trigger_type"]) or "").strip()
         except Exception:
             vi_flag = ""
-        if vi_flag:
-            in_vi = (vi_flag == "1")  # (common: 1=발동, 2=해제)
-        else:
-            in_vi = prev_in_vi  # Broker sometimes omits field on partial packets
 
-        # 2) Cache minimal fields for our 4 columns
+        if vi_flag == "1":
+            in_vi = True
+        elif vi_flag == "2":
+            in_vi = False
+        else:
+            # Fallback to previous known membership if flag missing
+            in_vi = code in self._vi_symbols
+
+        # 2) Read/retain fields needed for our 4 columns
         def _read_fid(fid: int) -> str:
             try:
                 return (self.kiwoom.get_comm_real_data(code, fid) or "").strip()
@@ -190,35 +202,31 @@ class VILister(QObject):
         if trig_price:
             self._vi_info.setdefault(code, {})["trigger_price"] = trig_price
 
-        # Maintain internal set
+        # 3) State transition handling + emits
         if in_vi:
+            # Ensure membership and emit a True row
+            if code not in self._vi_symbols:
+                logger.debug("VI enter detected (add): %s", code)
             self._vi_symbols.add(code)
-        else:
-            self._vi_symbols.discard(code)
 
-        # 3) Emit when entering VI or when leaving so GUI can clear the row
-        should_emit = False
-        emit_flag = in_vi
-        if in_vi:
-            should_emit = True
-        elif prev_in_vi and not in_vi:
-            should_emit = True
-            emit_flag = False
-
-        elif vi_flag == "2":  # explicit 해제 flag even if we missed the entry
-            should_emit = True
-            emit_flag = False
-
-        if should_emit:
             row = {
                 "Ticker#": code,
                 "종목이름": name or "",
                 "Trigger Price": trig_price or "",
-                "현재 VI 진입여부": emit_flag,
+                "현재 VI 진입여부": True,
             }
-            self.vi_status_changed.emit(code, emit_flag, row)
+            self.vi_status_changed.emit(code, True, row)
+        else:
+            # If previously present, remove and emit False to let GUI drop the row
+            if code in self._vi_symbols:
+                logger.debug("VI release detected (remove): %s", code)
+                self._vi_symbols.remove(code)
 
-    # ------------------------------------------------------------------
-    def is_in_vi(self, code: str) -> bool:
-        """Return True if *code* is currently in a VI halt."""
-        return code in self._vi_symbols
+            # Always emit False on release so GUI can remove any lingering row
+            row = {
+                "Ticker#": code,
+                "종목이름": name or "",
+                "Trigger Price": trig_price or "",
+                "현재 VI 진입여부": False,
+            }
+            self.vi_status_changed.emit(code, False, row)
